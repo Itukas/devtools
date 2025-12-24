@@ -1,0 +1,43 @@
+:root {
+    --primary: #3b82f6;
+    --bg: #f3f4f6;
+    --sidebar-bg: #1f2937;
+    --text-light: #f9fafb;
+    --border: #e5e7eb;
+}
+
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); height: 100vh; overflow: hidden; }
+.app-container { display: flex; height: 100%; }
+
+/* 侧边栏 */
+.sidebar { width: 240px; background: var(--sidebar-bg); color: var(--text-light); display: flex; flex-direction: column; }
+.logo { padding: 20px; font-size: 1.25rem; font-weight: bold; border-bottom: 1px solid #374151; }
+#nav-list { padding: 10px; flex: 1; overflow-y: auto; }
+.nav-item { padding: 12px 15px; cursor: pointer; border-radius: 6px; margin-bottom: 4px; transition: background 0.2s; opacity: 0.8; }
+.nav-item:hover { background: #374151; opacity: 1; }
+.nav-item.active { background: var(--primary); opacity: 1; font-weight: 500; }
+
+/* 内容区 */
+.content-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#tool-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+#tool-title { margin: 0; font-size: 1.2rem; color: #111827; }
+#tool-container { flex: 1; padding: 25px; overflow-y: auto; position: relative; }
+.welcome-msg { color: #6b7280; text-align: center; margin-top: 100px; font-size: 1.1rem; }
+
+/* 通用组件样式 */
+.tool-box { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+.btn-group { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+button { padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: opacity 0.2s; }
+button:hover { opacity: 0.9; }
+button.secondary { background: #6b7280; }
+textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace; resize: none; flex: 1; margin-bottom: 10px; }
+.row { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; }
+input[type="text"] { padding: 8px; border: 1px solid var(--border); border-radius: 4px; flex: 1; }
+
+/* 代码对比特定样式 */
+.diff-container { display: flex; gap: 10px; height: 100%; }
+.diff-pane { flex: 1; display: flex; flex-direction: column; }
+.diff-result { background: #fff; border: 1px solid var(--border); font-family: monospace; overflow: auto; padding: 10px; flex: 1; white-space: pre; line-height: 1.5; }
+.diff-added { background-color: #d1fae5; color: #065f46; display: block; } /* 绿色 */
+.diff-removed { background-color: #fee2e2; color: #991b1b; display: block; } /* 红色 */
+.diff-neutral { display: block; color: #374151; }
