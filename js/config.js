@@ -47,10 +47,22 @@ export default [
         name: 'Mongo 数据解析',
         icon: '🍃',
         file: 'mongo.js'
-    },{
+    }, {
         id: 'mongo-builder',
         name: 'Mongo 查询生成',
         icon: '🔍',
         file: 'mongo_builder.js'
+    },
+    {
+        id: 'video-gif',
+        name: '视频转 GIF',
+        icon: '🎞️',
+        file: 'video_gif.js'
+    },
+    {
+        id: 'image-stitch',
+        name: '多图拼接',
+        icon: '🎞️',
+        file: 'image_stitch.js'
     }
 ];
