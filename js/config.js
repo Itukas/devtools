@@ -20,22 +20,26 @@ export default [
     // --- 新增的图片工具 ---
     {
         id: 'image',
-        name: '图片压缩',
+        name: '图片压缩/裁剪',
         icon: '📷',
         file: 'image.js'
     },
-    // ... 其他工具 ...
     {
         id: 'vrchatBilibili',
         name: 'VRC 链接转换',
         icon: '📺',  // 或者你可以用 '✨'
         file: 'vrchatBilibili.js'
     },
-    //
     {
         id: 'sql-table',
         name: 'linux SQL结果转表格',
         icon: '📊',
         file: 'sql_table.js'
+    },
+    {
+        id: 'img-base64',
+        name: '图片 Base64 互转',
+        icon: '🖼️',
+        file: 'img_base64.js'
     }
 ];
