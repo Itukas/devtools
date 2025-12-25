@@ -30,5 +30,12 @@ export default [
         name: 'VRC 链接转换',
         icon: '📺',  // 或者你可以用 '✨'
         file: 'vrchatBilibili.js'
+    },
+    //
+    {
+        id: 'sql-table',
+        name: 'linux SQL结果转表格',
+        icon: '📊',
+        file: 'sql_table.js'
     }
 ];
