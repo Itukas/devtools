@@ -64,5 +64,23 @@ export default [
         name: '多图拼接',
         icon: '🎞️',
         file: 'image_stitch.js'
+    },
+    {
+        id: 'jwt',
+        name: 'JWT 解码',
+        icon: '🔑',
+        file: 'jwt.js'
+    },
+    {
+        id: 'text-convert',
+        name: '文本/变量转换',
+        icon: 'Aa',
+        file: 'text_convert.js'
+    },
+    {
+        id: 'base64',
+        name: 'Base64 加密解密',
+        icon: '🔐',
+        file: 'base64.js'
     }
 ];
