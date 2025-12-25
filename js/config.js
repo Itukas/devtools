@@ -25,10 +25,10 @@ export default [
         file: 'image.js'
     },
     {
-        id: 'vrchatBilibili',
+        id: 'vrchat_bilibili',
         name: 'VRC 链接转换',
         icon: '📺',  // 或者你可以用 '✨'
-        file: 'vrchatBilibili.js'
+        file: 'vrchat_bilibili.js'
     },
     {
         id: 'sql-table',
@@ -41,5 +41,16 @@ export default [
         name: '图片 Base64 互转',
         icon: '🖼️',
         file: 'img_base64.js'
+    },
+    {
+        id: 'mongo',
+        name: 'Mongo 数据解析',
+        icon: '🍃',
+        file: 'mongo.js'
+    },{
+        id: 'mongo-builder',
+        name: 'Mongo 查询生成',
+        icon: '🔍',
+        file: 'mongo_builder.js'
     }
 ];
