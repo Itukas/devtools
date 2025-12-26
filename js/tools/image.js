@@ -7,19 +7,13 @@ export function render() {
             
             /* 上传区域 */
             .upload-zone {
-                border: 2px dashed #cbd5e1;
-                border-radius: 8px;
-                padding: 20px;
-                text-align: center;
-                background: #f8fafc;
-                cursor: pointer;
-                transition: all 0.2s;
-                position: relative;
+                border: 2px dashed #cbd5e1; border-radius: 8px; padding: 12px;
+                text-align: center; background: #f8fafc; cursor: pointer; transition: all 0.2s; position: relative;
+                display: flex; justify-content: center; align-items: center; gap: 10px;
             }
             .upload-zone:hover, .upload-zone.drag-over { border-color: #3b82f6; background: #eff6ff; }
-            .upload-icon { font-size: 32px; display: block; margin-bottom: 5px; }
-            
-            /* 关键修改：加上 pointer-events: none，防止点击冲突 */
+            .upload-icon { font-size: 20px; }
+            .upload-text { font-size: 13px; color: #64748b; }
             #file-input { 
                 position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
                 opacity: 0; cursor: pointer; pointer-events: none; 
@@ -27,37 +21,85 @@ export function render() {
 
             /* 控制栏 */
             .controls-panel {
-                display: flex;
-                gap: 12px;
-                align-items: center;
-                background: #fff;
-                padding: 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                flex-wrap: wrap;
+                display: flex; gap: 15px; align-items: flex-start;
+                background: #fff; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px;
+                flex-wrap: wrap; font-size: 13px; color: #334155;
             }
-            .control-group { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #334155; }
-            .input-dim { width: 60px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-family: monospace; }
-            select { padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; }
+            .control-group { display: flex; flex-direction: column; gap: 6px; }
+            .row { display: flex; align-items: center; gap: 8px; }
             
-            /* 按钮样式 */
-            .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity 0.2s; color: #fff; }
+            .input-dim { width: 60px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-family: monospace; }
+            select { padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
+            
+            /* --- 核心美化：自定义滑块样式 --- */
+            input[type=range] {
+                -webkit-appearance: none; /* 去除默认样式 */
+                width: 100px; /* 默认宽度 */
+                height: 6px;
+                background: #e2e8f0;
+                border-radius: 3px;
+                outline: none;
+                transition: background 0.2s;
+                cursor: pointer;
+            }
+            input[type=range]:hover { background: #cbd5e1; }
+            
+            /* 滑块圆钮 (Thumb) */
+            input[type=range]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 16px; height: 16px;
+                background: #3b82f6;
+                border-radius: 50%;
+                cursor: pointer;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                transition: transform 0.1s;
+                margin-top: -5px; /* 对齐轨道 */
+            }
+            /* Firefox 兼容 */
+            input[type=range]::-moz-range-thumb {
+                width: 16px; height: 16px;
+                background: #3b82f6;
+                border: none; border-radius: 50%;
+                cursor: pointer;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            }
+            
+            /* 交互动效 */
+            input[type=range]:active::-webkit-slider-thumb { transform: scale(1.2); background: #2563eb; }
+            
+            /* 按钮 */
+            .btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity 0.2s; color: #fff; white-space: nowrap; }
             .btn:hover { opacity: 0.9; }
             .btn-blue { background: #3b82f6; }
             .btn-green { background: #10b981; }
             .btn-orange { background: #f97316; }
             .btn-gray { background: #64748b; }
 
-            /* 裁剪编辑器覆盖层 */
+            /* 预览区 */
+            .preview-container { display: flex; gap: 15px; flex: 1; min-height: 0; }
+            .img-card {
+                flex: 1; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+                display: flex; flex-direction: column; overflow: hidden;
+            }
+            .card-header {
+                padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+                font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+            }
+            .img-wrapper {
+                flex: 1; background: url('data:image/svg+xml;utf8,<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="10" fill="%23f0f0f0"/><rect x="10" y="10" width="10" height="10" fill="%23f0f0f0"/><rect x="0" y="10" width="10" height="10" fill="%23ffffff"/><rect x="10" y="0" width="10" height="10" fill="%23ffffff"/></svg>'); 
+                display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 15px;
+            }
+            .preview-img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+            .card-footer { padding: 10px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748b; display:flex; justify-content:center; align-items:center; gap:10px; }
+            
+            .badge-info { padding: 2px 8px; border-radius: 10px; font-weight: 500; font-size: 11px; }
+            .bg-red { background: #fee2e2; color: #991b1b; }
+            .bg-green { background: #dcfce7; color: #166534; }
+
+            /* 裁剪层 */
             #crop-overlay {
-                display: none;
-                position: absolute;
-                top: 0; left: 0; width: 100%; height: 100%;
-                background: #1e293b;
-                z-index: 100;
-                flex-direction: column;
-                border-radius: 8px;
-                overflow: hidden;
+                display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                background: #1e293b; z-index: 100; flex-direction: column; border-radius: 8px; overflow: hidden;
             }
             .crop-area { flex: 1; position: relative; background: #000; overflow: hidden; }
             .crop-toolbar {
@@ -65,28 +107,6 @@ export function render() {
                 border-top: 1px solid #334155;
             }
             #image-to-crop { max-width: 100%; display: block; }
-
-            /* 对比区域 */
-            .preview-container { display: flex; gap: 15px; flex: 1; min-height: 0; }
-            .img-card {
-                flex: 1; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
-                display: flex; flex-direction: column; overflow: hidden;
-            }
-            .card-header {
-                padding: 8px 12px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
-                font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; align-items: center;
-            }
-            .img-wrapper {
-                flex: 1; background: url('data:image/svg+xml;utf8,<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="10" fill="%23f0f0f0"/><rect x="10" y="10" width="10" height="10" fill="%23f0f0f0"/><rect x="0" y="10" width="10" height="10" fill="%23ffffff"/><rect x="10" y="0" width="10" height="10" fill="%23ffffff"/></svg>'); 
-                display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 10px;
-            }
-            .preview-img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-            .card-footer { padding: 10px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748b; }
-            
-            /* 徽章样式 */
-            .badge-info { padding: 2px 6px; border-radius: 4px; font-weight: normal; font-size: 12px; }
-            .bg-red { background: #fee2e2; color: #991b1b; }
-            .bg-green { background: #dcfce7; color: #166534; }
         </style>
 
         <div class="tool-box img-tool-container">
@@ -94,44 +114,60 @@ export function render() {
 
             <div class="upload-zone" id="drop-zone">
                 <span class="upload-icon">📷</span>
-                <span class="upload-text">点击或拖拽图片 (JPG, PNG, WebP)</span>
+                <span class="upload-text">点击或拖拽图片更换 (JPG, PNG, WebP)</span>
                 <input type="file" id="file-input" accept="image/*">
             </div>
 
             <div id="controls" class="controls-panel" style="display:none;">
-                <button id="btn-start-crop" class="btn btn-orange">✂️ 裁剪</button>
-                <div style="width:1px; height:20px; background:#e2e8f0; margin:0 5px;"></div>
-
                 <div class="control-group">
-                    <label>模式:</label>
-                    <select id="resize-mode">
-                        <option value="ratio">保持比例</option>
-                        <option value="stretch">强制拉伸</option>
-                    </select>
+                    <label>操作</label>
+                    <button id="btn-start-crop" class="btn btn-orange">✂️ 裁剪</button>
                 </div>
 
                 <div class="control-group">
-                    <input type="number" id="img-w" class="input-dim" placeholder="宽">
-                    <span style="color:#94a3b8;">x</span>
-                    <input type="number" id="img-h" class="input-dim" placeholder="高" disabled>
+                    <label>缩放比例 <span id="scale-val" style="color:#2563eb; font-weight:bold;">100%</span></label>
+                    <div class="row">
+                        <select id="size-preset" style="width:110px;">
+                            <option value="custom">自定义</option>
+                            <option value="1920x1080">1920 x 1080</option>
+                            <option value="1280x720">1280 x 720</option>
+                            <option value="1080x1080">1080 x 1080</option>
+                            <option value="800x600">800 x 600</option>
+                            <option value="0.5">缩小 50%</option>
+                            <option value="0.75">缩小 75%</option>
+                        </select>
+                        <input type="range" id="scale-slider" min="10" max="100" value="100" step="5" style="width:120px;" title="拖动缩放">
+                    </div>
                 </div>
 
                 <div class="control-group">
-                    <label>质量:</label>
-                    <input type="range" id="quality-slider" min="0.1" max="1.0" step="0.1" value="0.8" style="width:60px;">
-                    <span id="quality-val" style="font-weight:bold; color:#2563eb;">0.8</span>
+                    <label>尺寸 (px)</label>
+                    <div class="row">
+                        <input type="number" id="img-w" class="input-dim" placeholder="W">
+                        <span style="color:#94a3b8">×</span>
+                        <input type="number" id="img-h" class="input-dim" placeholder="H">
+                        <label style="font-size:12px; margin-left:2px; cursor:pointer; user-select:none;">
+                            <input type="checkbox" id="chk-ratio" checked> 锁定
+                        </label>
+                    </div>
                 </div>
 
                 <div class="control-group">
-                    <select id="out-mime">
-                        <option value="auto">原格式</option>
-                        <option value="image/jpeg">JPEG</option>
-                        <option value="image/webp">WebP</option>
-                        <option value="image/png">PNG</option>
-                    </select>
+                    <label>质量 / 格式 <span id="quality-val" style="color:#2563eb; font-weight:bold; font-size:12px;">0.8</span></label>
+                    <div class="row">
+                        <input type="range" id="quality-slider" min="0.1" max="1.0" step="0.1" value="0.8" style="width:100px;" title="质量调整">
+                        <select id="out-mime" style="width:80px;">
+                            <option value="auto">Auto</option>
+                            <option value="image/jpeg">JPG</option>
+                            <option value="image/png">PNG</option>
+                            <option value="image/webp">WebP</option>
+                        </select>
+                    </div>
                 </div>
                 
-                <button id="btn-recompress" class="btn btn-blue" style="margin-left:auto;">⚡ 压缩</button>
+                <div class="control-group" style="margin-left:auto; align-self:center;">
+                     <button id="btn-recompress" class="btn btn-blue" style="padding:8px 20px; font-size:14px;">⚡ 开始处理</button>
+                </div>
             </div>
 
             <div id="preview-area" class="preview-container" style="display:none;">
@@ -148,7 +184,7 @@ export function render() {
                     </div>
                     <div class="img-wrapper"><img id="comp-img" class="preview-img"></div>
                     <div class="card-footer">
-                        <span id="comp-dims" style="margin-right:10px;">-</span>
+                        <span id="comp-dims" style="font-weight:bold; color:#334155;">-</span>
                         <a id="btn-download" href="#" download="image.jpg"><button class="btn btn-green">⬇️ 下载</button></a>
                     </div>
                 </div>
@@ -159,25 +195,22 @@ export function render() {
                     <img id="image-to-crop" src="">
                 </div>
                 <div class="crop-toolbar">
-                    <div class="control-group">
-                        <label style="color:#fff;">裁剪框:</label>
-                        <input type="number" id="crop-w" class="input-dim" placeholder="W" style="background:#334155; color:white; border-color:#475569;">
-                        <span style="color:#64748b;">x</span>
-                        <input type="number" id="crop-h" class="input-dim" placeholder="H" style="background:#334155; color:white; border-color:#475569;">
-                        <button id="btn-set-crop-box" class="btn btn-gray" style="padding:4px 8px; font-size:12px;">应用尺寸</button>
+                    <div class="row" style="color:#fff;">
+                        <span>W:</span> <input type="number" id="crop-w" class="input-dim" style="background:#334155; color:#fff; border-color:#475569;">
+                        <span>H:</span> <input type="number" id="crop-h" class="input-dim" style="background:#334155; color:#fff; border-color:#475569;">
+                        <button id="btn-set-crop" class="btn btn-gray" style="padding:4px 8px; font-size:11px;">应用</button>
                     </div>
-                    <div style="display:flex; gap:10px;">
+                    <div class="row">
                         <button id="btn-cancel-crop" class="btn btn-gray">取消</button>
-                        <button id="btn-confirm-crop" class="btn btn-green">✅ 确认裁剪</button>
+                        <button id="btn-confirm-crop" class="btn btn-green">✅ 确认</button>
                     </div>
                 </div>
             </div>
         </div>
     `;
 }
-
 export function init() {
-    // 动态加载资源
+    // 资源加载
     const loadResource = (tag, url) => {
         return new Promise((resolve) => {
             if (document.querySelector(`${tag}[src="${url}"], ${tag}[href="${url}"]`)) return resolve();
@@ -195,20 +228,21 @@ export function init() {
     Promise.all([
         loadResource('link', 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css'),
         loadResource('script', 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js')
-    ]).then(() => {
-        status.style.display = 'none';
-    });
+    ]).then(() => status.style.display = 'none');
 
-    // Elements
+    // DOM Elements
     const fileInput = document.getElementById('file-input');
     const dropZone = document.getElementById('drop-zone');
     const controls = document.getElementById('controls');
     const previewArea = document.getElementById('preview-area');
 
-    // Controls
-    const resizeMode = document.getElementById('resize-mode');
+    // Inputs
+    const sizePreset = document.getElementById('size-preset');
+    const scaleSlider = document.getElementById('scale-slider');
+    const scaleVal = document.getElementById('scale-val');
     const inputW = document.getElementById('img-w');
     const inputH = document.getElementById('img-h');
+    const chkRatio = document.getElementById('chk-ratio');
     const qualitySlider = document.getElementById('quality-slider');
     const qualityVal = document.getElementById('quality-val');
     const mimeSelect = document.getElementById('out-mime');
@@ -231,10 +265,12 @@ export function init() {
     const btnCancelCrop = document.getElementById('btn-cancel-crop');
     const cropW = document.getElementById('crop-w');
     const cropH = document.getElementById('crop-h');
-    const btnSetCropBox = document.getElementById('btn-set-crop-box');
+    const btnSetCrop = document.getElementById('btn-set-crop');
 
     let currentFile = null;
     let cropper = null;
+    let originalWidth = 0;
+    let originalHeight = 0;
 
     const formatSize = (bytes) => {
         if (bytes === 0) return '0 B';
@@ -248,15 +284,11 @@ export function init() {
         compImg.src = url;
         compImg.style.opacity = '1';
 
-        // 计算节省比例
         let sizeText = formatSize(blob.size);
         if (currentFile && currentFile.size > 0) {
             const saved = ((currentFile.size - blob.size) / currentFile.size * 100).toFixed(1);
-            if (blob.size < currentFile.size) {
-                sizeText += ` (省 ${saved}%)`;
-            } else {
-                sizeText += ` (变大)`;
-            }
+            if (blob.size < currentFile.size) sizeText += ` (省 ${saved}%)`;
+            else sizeText += ` (变大)`;
         }
         compSize.textContent = sizeText;
 
@@ -265,6 +297,7 @@ export function init() {
         tempImg.src = url;
 
         let ext = blob.type.split('/')[1];
+        if (mimeSelect.value !== 'auto') ext = mimeSelect.value.split('/')[1];
         btnDownload.href = url;
         btnDownload.download = `processed_${Date.now()}.${ext}`;
     };
@@ -275,22 +308,24 @@ export function init() {
         const quality = parseFloat(qualitySlider.value);
         const w = parseInt(inputW.value);
         const h = parseInt(inputH.value);
-        const mode = resizeMode.value;
-        let mimeType = mimeSelect.value === 'auto' ? currentFile.type : mimeSelect.value;
+        const mimeType = mimeSelect.value === 'auto' ? currentFile.type : mimeSelect.value;
+        const ratioLocked = chkRatio.checked;
 
         compImg.style.opacity = '0.5';
 
-        if (mode === 'ratio') {
-            const options = {
+        // 使用 Compressor.js (虽然它主要用于压缩，但也能 resize)
+        // 但 Compressor.js 对于强制拉伸支持不好，所以如果 ratioLocked 为 false，我们要用 Canvas 手动处理
+        if (ratioLocked) {
+            new Compressor(currentFile, {
                 quality: quality,
                 mimeType: mimeType,
+                maxWidth: w, // Compressor 只能指定最大宽高，自动保持比例
+                maxHeight: h,
                 success: updateCompInfo,
                 error: (e) => alert(e.message)
-            };
-            if (w) options.maxWidth = w;
-            new Compressor(currentFile, options);
+            });
         } else {
-            if (!w || !h) return alert("拉伸模式需要宽度和高度");
+            // 强制尺寸 (Canvas)
             const img = new Image();
             img.src = URL.createObjectURL(currentFile);
             img.onload = () => {
@@ -307,10 +342,7 @@ export function init() {
 
     const handleFile = (file) => {
         if (!file || !file.type.startsWith('image')) return alert('无效图片');
-
-        // 关键修改：清空 input，确保下次能选同一个文件
         fileInput.value = '';
-
         currentFile = file;
 
         const url = URL.createObjectURL(file);
@@ -319,81 +351,133 @@ export function init() {
 
         const tempImg = new Image();
         tempImg.onload = () => {
-            origDims.textContent = `${tempImg.width} x ${tempImg.height}`;
-            inputW.value = tempImg.width;
-            inputH.value = tempImg.height;
+            originalWidth = tempImg.width;
+            originalHeight = tempImg.height;
+            origDims.textContent = `${originalWidth} x ${originalHeight}`;
+
+            // 重置控件
+            inputW.value = originalWidth;
+            inputH.value = originalHeight;
+            scaleSlider.value = 100;
+            scaleVal.textContent = "100%";
+            sizePreset.value = "custom";
+
             doCompress();
         };
         tempImg.src = url;
 
         controls.style.display = 'flex';
         previewArea.style.display = 'flex';
-        dropZone.style.padding = "10px";
+        dropZone.style.padding = "5px"; // 变小
         dropZone.querySelector('.upload-icon').style.display = 'none';
-        dropZone.querySelector('.upload-text').textContent = '点击更换图片';
+        dropZone.querySelector('.upload-text').textContent = '点击更换';
     };
+
+    // --- 核心逻辑：尺寸联动 ---
+
+    // 1. 预设改变
+    sizePreset.onchange = () => {
+        const val = sizePreset.value;
+        if (val === 'custom') return;
+
+        if (val.includes('x')) {
+            // 固定像素预设 (如 1920x1080)
+            const [w, h] = val.split('x').map(Number);
+            inputW.value = w;
+            inputH.value = h;
+            // 解锁比例，因为预设可能不符合原图比例
+            chkRatio.checked = false;
+            scaleSlider.value = 100; // 重置缩放条
+            scaleVal.textContent = "Custom";
+        } else {
+            // 比例预设 (如 0.5)
+            const ratio = parseFloat(val);
+            inputW.value = Math.round(originalWidth * ratio);
+            inputH.value = Math.round(originalHeight * ratio);
+            chkRatio.checked = true;
+            scaleSlider.value = ratio * 100;
+            scaleVal.textContent = (ratio * 100) + "%";
+        }
+        doCompress();
+    };
+
+    // 2. 缩放滑块改变
+    scaleSlider.oninput = () => {
+        const pct = parseInt(scaleSlider.value);
+        scaleVal.textContent = pct + "%";
+
+        inputW.value = Math.round(originalWidth * (pct / 100));
+        inputH.value = Math.round(originalHeight * (pct / 100));
+
+        sizePreset.value = "custom";
+        chkRatio.checked = true; // 缩放肯定是保持比例的
+        // 防抖处理：滑块拖动结束再压缩，或者用 setTimeout
+        // 这里简单起见，拖动时只变数字，松开再压缩 (onchange)
+    };
+    scaleSlider.onchange = doCompress;
+
+    // 3. 自定义输入联动
+    inputW.oninput = () => {
+        if (chkRatio.checked && originalWidth > 0) {
+            const w = parseInt(inputW.value) || 0;
+            const ratio = w / originalWidth;
+            inputH.value = Math.round(originalHeight * ratio);
+
+            // 更新滑块显示
+            const pct = Math.min(100, Math.round(ratio * 100));
+            scaleSlider.value = pct;
+            scaleVal.textContent = pct + "%";
+        }
+    };
+
+    inputH.oninput = () => {
+        if (chkRatio.checked && originalHeight > 0) {
+            const h = parseInt(inputH.value) || 0;
+            const ratio = h / originalHeight;
+            inputW.value = Math.round(originalWidth * ratio);
+
+            const pct = Math.min(100, Math.round(ratio * 100));
+            scaleSlider.value = pct;
+            scaleVal.textContent = pct + "%";
+        }
+    };
+
+    // 输入框回车触发压缩
+    [inputW, inputH].forEach(el => el.addEventListener('change', doCompress));
 
     // Crop Logic
     btnStartCrop.onclick = () => {
-        if (!window.Cropper) return alert("Cropper.js 尚未加载完成，请稍后再试");
+        if (!window.Cropper) return alert("组件加载中...");
         cropOverlay.style.display = 'flex';
         imageToCrop.src = URL.createObjectURL(currentFile);
-
         if (cropper) cropper.destroy();
         cropper = new Cropper(imageToCrop, {
-            viewMode: 1,
-            autoCropArea: 0.8,
-            crop(event) {
-                cropW.value = Math.round(event.detail.width);
-                cropH.value = Math.round(event.detail.height);
-            }
+            viewMode: 1, autoCropArea: 0.8,
+            crop(e) { cropW.value = Math.round(e.detail.width); cropH.value = Math.round(e.detail.height); }
         });
     };
-
-    btnSetCropBox.onclick = () => {
-        if (!cropper) return;
-        const w = parseFloat(cropW.value);
-        const h = parseFloat(cropH.value);
-        if (w && h) cropper.setData({ width: w, height: h });
+    btnSetCrop.onclick = () => {
+        if(cropper) cropper.setData({ width: parseFloat(cropW.value), height: parseFloat(cropH.value) });
     };
-
     btnConfirmCrop.onclick = () => {
-        if (!cropper) return;
-        cropper.getCroppedCanvas().toBlob((blob) => {
-            currentFile = blob;
-            handleFile(blob);
+        if(!cropper) return;
+        cropper.getCroppedCanvas().toBlob(blob => {
+            currentFile = blob; handleFile(blob);
             cropOverlay.style.display = 'none';
-            cropper.destroy();
-            cropper = null;
+            cropper.destroy(); cropper = null;
         });
     };
-
     btnCancelCrop.onclick = () => {
         cropOverlay.style.display = 'none';
-        if (cropper) { cropper.destroy(); cropper = null; }
+        if(cropper) { cropper.destroy(); cropper = null; }
     };
 
-    // Listeners
-    resizeMode.onchange = () => {
-        if (resizeMode.value === 'ratio') {
-            inputH.disabled = true; inputH.placeholder = "自动";
-        } else {
-            inputH.disabled = false; inputH.placeholder = "高";
-        }
-    };
+    // Other listeners
     qualitySlider.oninput = () => qualityVal.textContent = qualitySlider.value;
     btnRecompress.onclick = doCompress;
-
-    fileInput.onchange = (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); };
+    fileInput.onchange = (e) => { if(e.target.files[0]) handleFile(e.target.files[0]); };
     dropZone.onclick = () => fileInput.click();
     dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.border = "2px solid #3b82f6"; };
     dropZone.ondragleave = () => { dropZone.style.border = "2px dashed #cbd5e1"; };
-    dropZone.ondrop = (e) => {
-        e.preventDefault();
-        dropZone.style.border = "2px dashed #cbd5e1";
-        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-    };
-
-    // Init
-    resizeMode.dispatchEvent(new Event('change'));
+    dropZone.ondrop = (e) => { e.preventDefault(); dropZone.style.border = "2px dashed #cbd5e1"; if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
 }
