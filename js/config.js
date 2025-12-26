@@ -82,5 +82,17 @@ export default [
         name: 'Base64 加密解密',
         icon: '🔐',
         file: 'base64.js'
+    },
+    {
+        id: 'audio-clipper',
+        name: '音频剪辑拼接',
+        icon: '🎵',
+        file: 'audio_clipper.js'
+    },
+    {
+        id: 'video-clipper',
+        name: '视频剪辑拼接',
+        icon: '🎬',
+        file: 'video_clipper.js'
     }
 ];
