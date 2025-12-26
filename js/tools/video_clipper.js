@@ -163,12 +163,11 @@ export function init() {
     const btnExport = document.getElementById('btn-export');
     const logMsg = document.getElementById('log-msg');
 
-    // --- 核心修复：加载单线程版本 + 强制刷新缓存 ---
+    // 1. 加载 FFmpeg (单线程 + 防缓存)
     const loadFFmpeg = async () => {
         if (window.FFmpeg && ffmpeg) { enableUpload(); return; }
 
         try {
-            // 1. 加载主脚本 (0.9.5 版本)
             if (!window.FFmpeg) {
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
@@ -180,9 +179,7 @@ export function init() {
             }
 
             const { createFFmpeg } = window.FFmpeg;
-
-            // 2. 强制指定 Core 路径，并加上时间戳防止缓存
-            // 这是解决问题的关键！
+            // 加上时间戳防止 Core 文件缓存
             const coreUrl = `https://unpkg.com/@ffmpeg/core@0.8.5/dist/ffmpeg-core.js?v=${Date.now()}`;
 
             ffmpeg = createFFmpeg({
@@ -191,14 +188,13 @@ export function init() {
             });
 
             await ffmpeg.load();
-
             isFFmpegLoaded = true;
             enableUpload();
 
         } catch (e) {
-            console.error("FFmpeg Load Error:", e);
+            console.error(e);
             uploadTxt.innerHTML = '<span style="color:#ef4444">⚠️ 加载失败</span>';
-            subTxt.innerHTML = `原因: ${e.message}<br>请尝试 <b>清除浏览器缓存</b> 或使用 <b>无痕模式</b> 重新访问。`;
+            subTxt.textContent = "请清除缓存或使用无痕模式重试";
         }
     };
 
@@ -211,7 +207,7 @@ export function init() {
 
     loadFFmpeg();
 
-    // --- 下面是常规逻辑 ---
+    // 2. 文件处理
     const handleFile = (file) => {
         if (!isFFmpegLoaded) return alert("引擎未就绪");
         if (!file || !file.type.startsWith('video')) return alert('请上传视频');
@@ -231,6 +227,7 @@ export function init() {
         video.onerror = () => alert("无法播放此视频格式");
     };
 
+    // Canvas 逻辑
     const getCanvasWidth = () => videoDuration * pixelsPerSecond * zoomLevel;
     const timeToPx = (t) => t * pixelsPerSecond * zoomLevel;
     const pxToTime = (p) => p / (pixelsPerSecond * zoomLevel);
@@ -378,6 +375,7 @@ export function init() {
         if (px > scrollBox.scrollLeft + scrollBox.clientWidth) scrollBox.scrollLeft = px - scrollBox.clientWidth / 2;
     };
 
+    // 导出逻辑
     btnExport.onclick = async () => {
         if (!isFFmpegLoaded) return alert("FFmpeg 未就绪");
         if (segments.length === 0) return alert("请添加片段");
@@ -390,7 +388,6 @@ export function init() {
             for (let i = 0; i < segments.length; i++) {
                 const seg = segments[i], outName = `part${i}.mp4`;
                 logMsg.textContent = `正在剪辑片段 ${i+1}/${segments.length}...`;
-                // 使用 -c copy 快速剪辑（不重新编码），如果遇到花屏，请改回 -c:v libx264
                 await ffmpeg.run('-i', name, '-ss', seg.start.toString(), '-to', seg.end.toString(), '-c', 'copy', outName);
                 concatList.push(`file '${outName}'`);
             }
@@ -405,9 +402,11 @@ export function init() {
         finally { btnExport.disabled = false; }
     };
 
+    // Bindings
     zoomSlider.oninput = () => { zoomLevel = parseInt(zoomSlider.value); document.getElementById('zoom-val').textContent = zoomLevel + 'x'; resizeCanvas(); drawCanvas(); };
-    dropZone.onclick = () => fileInput.click();
     fileInput.onchange = (e) => handleFile(e.target.files[0]);
     btnAddSeg.onclick = () => addSegment(0, Math.min(videoDuration, 5));
     window.onresize = () => { if (editorPanel.style.display === 'flex') { resizeCanvas(); drawCanvas(); } };
+
+    // 删除了 dropZone.onclick，完全依赖原生 input 点击
 }
