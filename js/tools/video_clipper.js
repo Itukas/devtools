@@ -20,24 +20,26 @@ export function render() {
             /* 编辑区 */
             #editor-panel { display: none; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
 
-            /* 视频播放器容器 - 关键修改：支持 Resize */
+            /* 视频播放器容器 */
             .video-box {
                 background: #000;
                 border-radius: 8px;
-                height: 400px; /* 默认变大 */
+                height: 400px; /* 默认高度 */
                 min-height: 200px;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 overflow: hidden;
-                resize: vertical; /* 允许垂直拉伸 */
+                resize: vertical; /* 允许拉伸 */
                 position: relative;
             }
-            /* 提示用户可以拉伸 */
+            /* 提示可拉伸的手柄 */
             .video-box::after {
-                content: ':::';
-                position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-                color: #666; font-size: 10px; pointer-events: none; letter-spacing: 2px;
+                content: '';
+                position: absolute; bottom: 2px; right: 2px;
+                width: 10px; height: 10px;
+                background: linear-gradient(135deg, transparent 50%, #666 50%);
+                cursor: ns-resize; pointer-events: none;
             }
             video { max-width: 100%; max-height: 100%; display: block; }
 
@@ -94,10 +96,9 @@ export function render() {
             <div class="upload-zone" id="drop-zone">
                 <div style="font-size: 32px; margin-bottom: 5px;">🎬</div>
                 <div id="upload-txt">
-                    <div class="spinner"></div>正在初始化引擎...
+                    <div class="spinner"></div>正在初始化引擎 (单线程版)...
                 </div>
                 <div style="font-size:12px; color:#94a3b8; margin-top:5px;" id="sub-txt">首次加载需下载组件 (约25MB)</div>
-                <div id="error-alert" style="color:#ef4444; font-size:12px; display:none; margin-top:5px;"></div>
                 <input type="file" id="file-input" accept="video/*">
             </div>
 
@@ -170,7 +171,6 @@ export function init() {
     const fileInput = document.getElementById('file-input');
     const uploadTxt = document.getElementById('upload-txt');
     const subTxt = document.getElementById('sub-txt');
-    const errorAlert = document.getElementById('error-alert');
     const editorPanel = document.getElementById('editor-panel');
     const video = document.getElementById('video-player');
     const scrollBox = document.getElementById('scroll-box');
@@ -184,25 +184,20 @@ export function init() {
     const btnExport = document.getElementById('btn-export');
     const logMsg = document.getElementById('log-msg');
 
-    // --- 0. 加载 FFmpeg (0.10.x 版本) ---
+    // --- 0. 加载 FFmpeg (使用 v0.9.5 单线程版本) ---
+    // 这个版本不依赖 SharedArrayBuffer，完美兼容 GitHub Pages
     const loadFFmpeg = async () => {
         if (window.FFmpeg && ffmpeg) {
             enableUpload();
             return;
         }
 
-        // 环境检测
-        if (!window.SharedArrayBuffer) {
-            errorAlert.style.display = 'block';
-            errorAlert.innerHTML = `❌ 您的浏览器不支持 SharedArrayBuffer，FFmpeg 可能无法运行。<br>建议使用最新版 Chrome/Edge，并在 HTTPS 或本地 localhost 环境下运行。`;
-        }
-
         try {
-            // 使用 0.10.1 版本，这个版本对环境要求稍微宽松一些，且 API 较稳定
             if (!window.FFmpeg) {
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
-                    script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.10.1/dist/ffmpeg.min.js';
+                    // 使用 0.9.5 版本
+                    script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.9.5/dist/ffmpeg.min.js';
                     script.onload = resolve;
                     script.onerror = reject;
                     document.head.appendChild(script);
@@ -211,10 +206,10 @@ export function init() {
 
             const { createFFmpeg } = window.FFmpeg;
 
-            // 显式指定 corePath 为 0.10.0，确保版本匹配
+            // 显式指定 corePath 为 v0.8.5 (这是 v0.9.5 配套的单线程核心)
             ffmpeg = createFFmpeg({
                 log: true,
-                corePath: 'https://unpkg.com/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js'
+                corePath: 'https://unpkg.com/@ffmpeg/core@0.8.5/dist/ffmpeg-core.js'
             });
 
             await ffmpeg.load();
@@ -226,10 +221,6 @@ export function init() {
             console.error("FFmpeg Load Error:", e);
             uploadTxt.innerHTML = '<span style="color:#ef4444">⚠️ 引擎加载失败</span>';
             subTxt.textContent = "Error: " + e.message;
-            if (e.message.includes('SharedArrayBuffer')) {
-                errorAlert.style.display = 'block';
-                errorAlert.innerHTML = `原因：SharedArrayBuffer 未定义。<br>这通常是因为网站缺少 COOP/COEP 响应头。`;
-            }
         }
     };
 
@@ -238,14 +229,16 @@ export function init() {
         subTxt.textContent = "FFmpeg 引擎已就绪";
         dropZone.classList.add('ready');
         fileInput.style.pointerEvents = 'auto';
-        errorAlert.style.display = 'none';
     };
 
     loadFFmpeg();
 
     // --- 1. 文件处理 ---
     const handleFile = (file) => {
-        if (!isFFmpegLoaded) return alert("引擎未就绪");
+        if (!isFFmpegLoaded) {
+            alert("请等待引擎加载完成...");
+            return;
+        }
         if (!file || !file.type.startsWith('video')) return alert('请上传视频');
 
         fileInput.value = '';
@@ -567,9 +560,7 @@ export function init() {
         } catch (e) {
             console.error(e);
             logMsg.textContent = "错误: " + e.message;
-            if (e.message.includes('SharedArrayBuffer')) {
-                alert("出错: 浏览器安全限制导致多线程失败。请尝试在 HTTPS 或 localhost 环境下运行。");
-            }
+            alert("导出出错");
         } finally {
             btnExport.disabled = false;
         }
