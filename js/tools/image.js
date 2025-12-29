@@ -31,40 +31,16 @@ export function render() {
             .input-dim { width: 60px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-family: monospace; }
             select { padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
             
-            /* --- 核心美化：自定义滑块样式 --- */
+            /* 滑块样式 */
             input[type=range] {
-                -webkit-appearance: none; /* 去除默认样式 */
-                width: 100px; /* 默认宽度 */
-                height: 6px;
-                background: #e2e8f0;
-                border-radius: 3px;
-                outline: none;
-                transition: background 0.2s;
-                cursor: pointer;
+                -webkit-appearance: none; width: 100px; height: 6px;
+                background: #e2e8f0; border-radius: 3px; outline: none; transition: background 0.2s; cursor: pointer;
             }
             input[type=range]:hover { background: #cbd5e1; }
-            
-            /* 滑块圆钮 (Thumb) */
             input[type=range]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                width: 16px; height: 16px;
-                background: #3b82f6;
-                border-radius: 50%;
-                cursor: pointer;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-                transition: transform 0.1s;
-                margin-top: -5px; /* 对齐轨道 */
+                -webkit-appearance: none; width: 16px; height: 16px; background: #3b82f6;
+                border-radius: 50%; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform 0.1s; margin-top: -5px;
             }
-            /* Firefox 兼容 */
-            input[type=range]::-moz-range-thumb {
-                width: 16px; height: 16px;
-                background: #3b82f6;
-                border: none; border-radius: 50%;
-                cursor: pointer;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            }
-            
-            /* 交互动效 */
             input[type=range]:active::-webkit-slider-thumb { transform: scale(1.2); background: #2563eb; }
             
             /* 按钮 */
@@ -198,7 +174,12 @@ export function render() {
                     <div class="row" style="color:#fff;">
                         <span>W:</span> <input type="number" id="crop-w" class="input-dim" style="background:#334155; color:#fff; border-color:#475569;">
                         <span>H:</span> <input type="number" id="crop-h" class="input-dim" style="background:#334155; color:#fff; border-color:#475569;">
-                        <button id="btn-set-crop" class="btn btn-gray" style="padding:4px 8px; font-size:11px;">应用</button>
+                        
+                        <label style="font-size:12px; display:flex; align-items:center; cursor:pointer; margin-left:5px; color:#cbd5e1;">
+                            <input type="checkbox" id="chk-crop-ratio" style="margin-right:4px;"> 🔒锁定比例
+                        </label>
+                        
+                        <button id="btn-set-crop" class="btn btn-gray" style="padding:4px 8px; font-size:11px; margin-left:5px;">应用尺寸</button>
                     </div>
                     <div class="row">
                         <button id="btn-cancel-crop" class="btn btn-gray">取消</button>
@@ -209,6 +190,7 @@ export function render() {
         </div>
     `;
 }
+
 export function init() {
     // 资源加载
     const loadResource = (tag, url) => {
@@ -266,6 +248,7 @@ export function init() {
     const cropW = document.getElementById('crop-w');
     const cropH = document.getElementById('crop-h');
     const btnSetCrop = document.getElementById('btn-set-crop');
+    const chkCropRatio = document.getElementById('chk-crop-ratio'); // 新增
 
     let currentFile = null;
     let cropper = null;
@@ -313,19 +296,13 @@ export function init() {
 
         compImg.style.opacity = '0.5';
 
-        // 使用 Compressor.js (虽然它主要用于压缩，但也能 resize)
-        // 但 Compressor.js 对于强制拉伸支持不好，所以如果 ratioLocked 为 false，我们要用 Canvas 手动处理
         if (ratioLocked) {
             new Compressor(currentFile, {
-                quality: quality,
-                mimeType: mimeType,
-                maxWidth: w, // Compressor 只能指定最大宽高，自动保持比例
-                maxHeight: h,
+                quality: quality, mimeType: mimeType, maxWidth: w, maxHeight: h,
                 success: updateCompInfo,
                 error: (e) => alert(e.message)
             });
         } else {
-            // 强制尺寸 (Canvas)
             const img = new Image();
             img.src = URL.createObjectURL(currentFile);
             img.onload = () => {
@@ -354,111 +331,66 @@ export function init() {
             originalWidth = tempImg.width;
             originalHeight = tempImg.height;
             origDims.textContent = `${originalWidth} x ${originalHeight}`;
-
-            // 重置控件
-            inputW.value = originalWidth;
-            inputH.value = originalHeight;
-            scaleSlider.value = 100;
-            scaleVal.textContent = "100%";
-            sizePreset.value = "custom";
-
+            inputW.value = originalWidth; inputH.value = originalHeight;
+            scaleSlider.value = 100; scaleVal.textContent = "100%"; sizePreset.value = "custom";
             doCompress();
         };
         tempImg.src = url;
 
         controls.style.display = 'flex';
         previewArea.style.display = 'flex';
-        dropZone.style.padding = "5px"; // 变小
+        dropZone.style.padding = "5px";
         dropZone.querySelector('.upload-icon').style.display = 'none';
         dropZone.querySelector('.upload-text').textContent = '点击更换';
     };
 
-    // --- 核心逻辑：尺寸联动 ---
-
-    // 1. 预设改变
-    sizePreset.onchange = () => {
-        const val = sizePreset.value;
-        if (val === 'custom') return;
-
-        if (val.includes('x')) {
-            // 固定像素预设 (如 1920x1080)
-            const [w, h] = val.split('x').map(Number);
-            inputW.value = w;
-            inputH.value = h;
-            // 解锁比例，因为预设可能不符合原图比例
-            chkRatio.checked = false;
-            scaleSlider.value = 100; // 重置缩放条
-            scaleVal.textContent = "Custom";
-        } else {
-            // 比例预设 (如 0.5)
-            const ratio = parseFloat(val);
-            inputW.value = Math.round(originalWidth * ratio);
-            inputH.value = Math.round(originalHeight * ratio);
-            chkRatio.checked = true;
-            scaleSlider.value = ratio * 100;
-            scaleVal.textContent = (ratio * 100) + "%";
-        }
-        doCompress();
-    };
-
-    // 2. 缩放滑块改变
-    scaleSlider.oninput = () => {
-        const pct = parseInt(scaleSlider.value);
-        scaleVal.textContent = pct + "%";
-
-        inputW.value = Math.round(originalWidth * (pct / 100));
-        inputH.value = Math.round(originalHeight * (pct / 100));
-
-        sizePreset.value = "custom";
-        chkRatio.checked = true; // 缩放肯定是保持比例的
-        // 防抖处理：滑块拖动结束再压缩，或者用 setTimeout
-        // 这里简单起见，拖动时只变数字，松开再压缩 (onchange)
-    };
-    scaleSlider.onchange = doCompress;
-
-    // 3. 自定义输入联动
-    inputW.oninput = () => {
-        if (chkRatio.checked && originalWidth > 0) {
-            const w = parseInt(inputW.value) || 0;
-            const ratio = w / originalWidth;
-            inputH.value = Math.round(originalHeight * ratio);
-
-            // 更新滑块显示
-            const pct = Math.min(100, Math.round(ratio * 100));
-            scaleSlider.value = pct;
-            scaleVal.textContent = pct + "%";
-        }
-    };
-
-    inputH.oninput = () => {
-        if (chkRatio.checked && originalHeight > 0) {
-            const h = parseInt(inputH.value) || 0;
-            const ratio = h / originalHeight;
-            inputW.value = Math.round(originalWidth * ratio);
-
-            const pct = Math.min(100, Math.round(ratio * 100));
-            scaleSlider.value = pct;
-            scaleVal.textContent = pct + "%";
-        }
-    };
-
-    // 输入框回车触发压缩
-    [inputW, inputH].forEach(el => el.addEventListener('change', doCompress));
-
-    // Crop Logic
+    // --- 裁剪功能 ---
     btnStartCrop.onclick = () => {
         if (!window.Cropper) return alert("组件加载中...");
         cropOverlay.style.display = 'flex';
         imageToCrop.src = URL.createObjectURL(currentFile);
+
+        // 重置状态
+        chkCropRatio.checked = false;
+
         if (cropper) cropper.destroy();
         cropper = new Cropper(imageToCrop, {
-            viewMode: 1, autoCropArea: 0.8,
-            crop(e) { cropW.value = Math.round(e.detail.width); cropH.value = Math.round(e.detail.height); }
+            viewMode: 1,
+            autoCropArea: 0.8,
+            crop(e) {
+                cropW.value = Math.round(e.detail.width);
+                cropH.value = Math.round(e.detail.height);
+            }
         });
     };
-    btnSetCrop.onclick = () => {
-        if(cropper) cropper.setData({ width: parseFloat(cropW.value), height: parseFloat(cropH.value) });
+
+    // 锁定/解锁比例
+    chkCropRatio.onchange = () => {
+        if (!cropper) return;
+        if (chkCropRatio.checked) {
+            // 锁定当前框的比例
+            const data = cropper.getData();
+            cropper.setAspectRatio(data.width / data.height);
+        } else {
+            // 自由拖动
+            cropper.setAspectRatio(NaN);
+        }
     };
+
+    // 应用输入框尺寸
+    btnSetCrop.onclick = () => {
+        if(!cropper) return;
+        const w = parseFloat(cropW.value);
+        const h = parseFloat(cropH.value);
+        if (w && h) {
+            cropper.setData({ width: w, height: h });
+            // 如果处于锁定状态，应用新尺寸后，比例也要更新成新的 w/h
+            if (chkCropRatio.checked) {
+                cropper.setAspectRatio(w / h);
+            }
+        }
+    };
+
     btnConfirmCrop.onclick = () => {
         if(!cropper) return;
         cropper.getCroppedCanvas().toBlob(blob => {
@@ -472,7 +404,49 @@ export function init() {
         if(cropper) { cropper.destroy(); cropper = null; }
     };
 
-    // Other listeners
+    // --- 其他常规逻辑 ---
+    sizePreset.onchange = () => {
+        const val = sizePreset.value;
+        if (val === 'custom') return;
+        if (val.includes('x')) {
+            const [w, h] = val.split('x').map(Number);
+            inputW.value = w; inputH.value = h;
+            chkRatio.checked = false; scaleSlider.value = 100; scaleVal.textContent = "Custom";
+        } else {
+            const ratio = parseFloat(val);
+            inputW.value = Math.round(originalWidth * ratio); inputH.value = Math.round(originalHeight * ratio);
+            chkRatio.checked = true; scaleSlider.value = ratio * 100; scaleVal.textContent = (ratio * 100) + "%";
+        }
+        doCompress();
+    };
+
+    scaleSlider.oninput = () => {
+        const pct = parseInt(scaleSlider.value);
+        scaleVal.textContent = pct + "%";
+        inputW.value = Math.round(originalWidth * (pct / 100));
+        inputH.value = Math.round(originalHeight * (pct / 100));
+        sizePreset.value = "custom"; chkRatio.checked = true;
+    };
+    scaleSlider.onchange = doCompress;
+
+    inputW.oninput = () => {
+        if (chkRatio.checked && originalWidth > 0) {
+            const ratio = (parseInt(inputW.value)||0) / originalWidth;
+            inputH.value = Math.round(originalHeight * ratio);
+            const pct = Math.min(100, Math.round(ratio * 100));
+            scaleSlider.value = pct; scaleVal.textContent = pct + "%";
+        }
+    };
+    inputH.oninput = () => {
+        if (chkRatio.checked && originalHeight > 0) {
+            const ratio = (parseInt(inputH.value)||0) / originalHeight;
+            inputW.value = Math.round(originalWidth * ratio);
+            const pct = Math.min(100, Math.round(ratio * 100));
+            scaleSlider.value = pct; scaleVal.textContent = pct + "%";
+        }
+    };
+
+    [inputW, inputH].forEach(el => el.addEventListener('change', doCompress));
     qualitySlider.oninput = () => qualityVal.textContent = qualitySlider.value;
     btnRecompress.onclick = doCompress;
     fileInput.onchange = (e) => { if(e.target.files[0]) handleFile(e.target.files[0]); };
