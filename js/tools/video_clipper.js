@@ -89,8 +89,8 @@ export function render() {
         <div class="tool-box vc-container">
             <div class="upload-zone" id="drop-zone">
                 <div style="font-size: 32px; margin-bottom: 5px;">🎬</div>
-                <div id="upload-txt"><div class="spinner"></div>正在加载 FFmpeg...</div>
-                <div style="font-size:12px; color:#94a3b8; margin-top:5px;" id="sub-txt">首次加载较慢 (单线程兼容模式)</div>
+                <div id="upload-txt"><div class="spinner"></div>正在加载引擎...</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:5px;" id="sub-txt">首次加载可能较慢 (GitHub 兼容模式)</div>
                 <input type="file" id="file-input" accept="video/*">
             </div>
 
@@ -136,7 +136,6 @@ export function init() {
     let zoomLevel = 1;
     let pixelsPerSecond = 20;
 
-    // Drag vars
     let isDragging = false, dragTargetId = null, dragAction = null, dragStartX = 0, dragOriginalStart = 0, dragOriginalEnd = 0;
 
     const SEGMENT_COLORS = [
@@ -163,11 +162,12 @@ export function init() {
     const btnExport = document.getElementById('btn-export');
     const logMsg = document.getElementById('log-msg');
 
-    // 1. 加载 FFmpeg (单线程 + 防缓存)
+    // --- 核心修复：加载单线程版本 + 防缓存 + 强制单线程参数 ---
     const loadFFmpeg = async () => {
         if (window.FFmpeg && ffmpeg) { enableUpload(); return; }
 
         try {
+            // 1. 加载主脚本 (0.9.5 版本)
             if (!window.FFmpeg) {
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
@@ -179,7 +179,9 @@ export function init() {
             }
 
             const { createFFmpeg } = window.FFmpeg;
-            // 加上时间戳防止 Core 文件缓存
+
+            // 2. 指定单线程核心路径
+            // 注意：加上时间戳 ?v=... 是为了防止你之前失败的缓存文件干扰
             const coreUrl = `https://unpkg.com/@ffmpeg/core@0.8.5/dist/ffmpeg-core.js?v=${Date.now()}`;
 
             ffmpeg = createFFmpeg({
@@ -194,20 +196,25 @@ export function init() {
         } catch (e) {
             console.error(e);
             uploadTxt.innerHTML = '<span style="color:#ef4444">⚠️ 加载失败</span>';
-            subTxt.textContent = "请清除缓存或使用无痕模式重试";
+            // 如果还是 SharedArrayBuffer 报错，这里会给出明确提示
+            if(e.message.includes("SharedArrayBuffer")) {
+                subTxt.innerHTML = "浏览器缓存了旧版本，请<b>清除缓存</b>或尝试<b>无痕模式</b>。";
+            } else {
+                subTxt.innerHTML = "网络错误，请检查网络连接。";
+            }
         }
     };
 
     const enableUpload = () => {
         uploadTxt.textContent = "点击或拖拽视频文件";
-        subTxt.textContent = "引擎已就绪";
+        subTxt.textContent = "引擎已就绪 (GitHub Pages 模式)";
         dropZone.classList.add('ready');
         fileInput.style.pointerEvents = 'auto';
     };
 
     loadFFmpeg();
 
-    // 2. 文件处理
+    // 常规逻辑保持不变
     const handleFile = (file) => {
         if (!isFFmpegLoaded) return alert("引擎未就绪");
         if (!file || !file.type.startsWith('video')) return alert('请上传视频');
@@ -227,7 +234,6 @@ export function init() {
         video.onerror = () => alert("无法播放此视频格式");
     };
 
-    // Canvas 逻辑
     const getCanvasWidth = () => videoDuration * pixelsPerSecond * zoomLevel;
     const timeToPx = (t) => t * pixelsPerSecond * zoomLevel;
     const pxToTime = (p) => p / (pixelsPerSecond * zoomLevel);
@@ -398,7 +404,7 @@ export function init() {
             const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
             const a = document.createElement('a'); a.href = url; a.download = `clip_${Date.now()}.mp4`; a.click();
             btnExport.textContent = "⚡ 导出成功";
-        } catch (e) { console.error(e); logMsg.textContent = "错误: " + e.message; alert("导出出错，建议使用 Chrome 浏览器"); }
+        } catch (e) { console.error(e); logMsg.textContent = "错误: " + e.message; alert("导出出错，请检查是否使用了无痕模式"); }
         finally { btnExport.disabled = false; }
     };
 
@@ -407,6 +413,4 @@ export function init() {
     fileInput.onchange = (e) => handleFile(e.target.files[0]);
     btnAddSeg.onclick = () => addSegment(0, Math.min(videoDuration, 5));
     window.onresize = () => { if (editorPanel.style.display === 'flex') { resizeCanvas(); drawCanvas(); } };
-
-    // 删除了 dropZone.onclick，完全依赖原生 input 点击
 }
