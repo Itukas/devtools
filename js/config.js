@@ -100,5 +100,11 @@ export default [
         name: '视频剪辑拼接',
         icon: '🎬',
         file: 'video_clipper.js'
-    }
+    },
+    {
+        id: 'mahjong',
+        name: '麻将算分(Beta)',
+        icon: '🀄',
+        file: 'mahjong/mahjong.js'
+    },
 ];
