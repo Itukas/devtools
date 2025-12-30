@@ -25,6 +25,12 @@ export default [
         file: 'image.js'
     },
     {
+        id: 'batch-image',
+        name: '批量图片压缩',
+        icon: '🖼️',
+        file: 'batch_image.js'
+    },
+    {
         id: 'vrchat_bilibili',
         name: 'VRC 链接转换',
         icon: '📺',  // 或者你可以用 '✨'
