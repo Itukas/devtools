@@ -107,4 +107,11 @@ export default [
         icon: '🀄',
         file: 'mahjong/mahjong.js'
     },
+    // ... 在 "image-group" 的 children 数组里 ...
+    {
+        id: 'remove-bg',
+        name: '智能抠图/去底',
+        icon: '❀',
+        file: 'remove_bg.js'
+    },
 ];
