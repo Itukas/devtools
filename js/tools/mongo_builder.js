@@ -31,7 +31,7 @@ export function render() {
             /* 单行条件样式 */
             .filter-row {
                 display: flex;
-                gap: 8px;
+                gap: 5px;
                 align-items: center;
                 background: #f8fafc;
                 padding: 8px;
@@ -41,12 +41,13 @@ export function render() {
             }
             .filter-row:hover { border-color: #cbd5e1; background: #f1f5f9; }
 
-            .input-key { flex: 1; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; font-family: monospace; }
-            .select-type { width: 90px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; background: #fff; cursor: pointer; }
-            .input-val { flex: 2; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; font-family: monospace; }
+            .input-key { flex: 2; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; font-family: monospace; min-width: 80px; }
+            .select-op { flex: 1.5; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; background: #fff; cursor: pointer; min-width: 90px; color: #b45309; font-weight: 500; }
+            .select-type { flex: 1.2; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; background: #fff; cursor: pointer; min-width: 80px; color: #059669; }
+            .input-val { flex: 3; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; font-family: monospace; min-width: 100px; }
             
             .btn-del { 
-                width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+                width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
                 border: none; background: #fee2e2; color: #ef4444; border-radius: 4px; cursor: pointer; font-weight: bold;
             }
             .btn-del:hover { background: #fecaca; }
@@ -72,6 +73,9 @@ export function render() {
                 white-space: pre-wrap;
                 word-break: break-all;
                 position: relative;
+                flex: 0 0 auto; /* 防止被挤压 */
+                max-height: 300px;
+                overflow-y: auto;
             }
             .copy-btn {
                 position: absolute; top: 10px; right: 10px;
@@ -92,7 +96,7 @@ export function render() {
                 </div>
 
             <div class="action-area">
-                <button id="btn-add-row" class="btn-add">+ 增加查询条件 (Field)</button>
+                <button id="btn-add-row" class="btn-add">+ 增加查询条件</button>
             </div>
 
             <div class="collection-row" style="border:none; padding-top:10px; padding-bottom:0;">
@@ -114,14 +118,41 @@ export function init() {
     const resultCode = document.getElementById('result-code');
     const btnCopy = document.getElementById('btn-copy');
 
-    // 类型定义
+    // 数据类型
     const TYPES = {
         STRING: 'String',
         NUMBER: 'Number',
         BOOL: 'Boolean',
         OBJECTID: 'ObjectId',
-        REGEX: 'RegExp (模糊)',
+        REGEX: 'RegExp',
         NULL: 'Null'
+    };
+
+    // 操作符定义
+    const OPERATORS = {
+        EQ: { label: '= (等于)', val: '$eq' },
+        NE: { label: '!= ($ne)', val: '$ne' },
+        GT: { label: '> ($gt)', val: '$gt' },
+        GTE: { label: '>= ($gte)', val: '$gte' },
+        LT: { label: '< ($lt)', val: '$lt' },
+        LTE: { label: '<= ($lte)', val: '$lte' },
+        IN: { label: 'In ($in)', val: '$in' },
+        NIN: { label: 'Not In ($nin)', val: '$nin' },
+        EXISTS: { label: 'Exists ($exists)', val: '$exists' },
+        REGEX: { label: 'Regex ($regex)', val: '$regex' }
+    };
+
+    // --- 辅助：格式化单个值 ---
+    const formatSingleValue = (val, type) => {
+        switch (type) {
+            case 'STRING': return `"${val}"`;
+            case 'NUMBER': return val === '' ? '0' : val;
+            case 'BOOL': return (val === 'true' || val === '1') ? 'true' : 'false';
+            case 'OBJECTID': return `ObjectId("${val}")`;
+            case 'REGEX': return `/${val}/`; // 简单正则字面量
+            case 'NULL': return 'null';
+            default: return `"${val}"`;
+        }
     };
 
     // --- 核心逻辑：生成代码 ---
@@ -133,39 +164,47 @@ export function init() {
 
         rows.forEach(row => {
             const key = row.querySelector('.input-key').value.trim();
+            const op = row.querySelector('.select-op').value;
             const type = row.querySelector('.select-type').value;
             const valInput = row.querySelector('.input-val');
-            let val = valInput ? valInput.value : ''; // Null类型没有input
+            let rawVal = valInput ? valInput.value : '';
 
             if (!key) return; // 跳过空key
 
-            let formattedVal;
+            let finalValueStr = '';
 
-            switch (type) {
-                case 'STRING':
-                    formattedVal = `"${val}"`;
-                    break;
-                case 'NUMBER':
-                    formattedVal = val === '' ? '0' : val; // 简单处理
-                    break;
-                case 'BOOL':
-                    formattedVal = (val === 'true' || val === '1') ? 'true' : 'false';
-                    break;
-                case 'OBJECTID':
-                    formattedVal = `ObjectId("${val}")`;
-                    break;
-                case 'REGEX':
-                    // 简单的模糊查询生成 /val/
-                    formattedVal = `/${val}/`;
-                    break;
-                case 'NULL':
-                    formattedVal = 'null';
-                    break;
-                default:
-                    formattedVal = `"${val}"`;
+            // 特殊处理数组类型操作符 ($in, $nin)
+            if (op === 'IN' || op === 'NIN') {
+                // 按逗号分割，并分别格式化
+                const arrValues = rawVal.split(/[,，]/).map(v => v.trim()).filter(v => v !== '');
+                const formattedArr = arrValues.map(v => formatSingleValue(v, type)).join(', ');
+                finalValueStr = `[${formattedArr}]`;
+            }
+            // 特殊处理 Exists
+            else if (op === 'EXISTS') {
+                // 如果用户输入了 true/false，尊重用户；否则默认 true
+                const lowerVal = rawVal.toLowerCase();
+                if (lowerVal === 'false' || lowerVal === '0') finalValueStr = 'false';
+                else finalValueStr = 'true';
+            }
+            // 标准单值处理
+            else {
+                finalValueStr = formatSingleValue(rawVal, type);
             }
 
-            parts.push(`    "${key}": ${formattedVal}`);
+            // 组装最终条件字符串
+            if (op === 'EQ') {
+                // 简化写法: { key: value }
+                parts.push(`    "${key}": ${finalValueStr}`);
+            } else if (op === 'REGEX') {
+                // 显式正则: { key: { $regex: 'val', $options: 'i' } }
+                // 为了简单，这里还是推荐用 RegExp 类型配合 EQ，或者生成标准对象
+                // 如果用户选了 Op=Regex，我们生成 { $regex: "val", $options: "i" }
+                parts.push(`    "${key}": { "$regex": "${rawVal}", "$options": "i" }`);
+            } else {
+                // 标准操作符: { key: { $op: value } }
+                parts.push(`    "${key}": { "${OPERATORS[op].val}": ${finalValueStr} }`);
+            }
         });
 
         const queryBody = parts.length > 0 ? `\n${parts.join(',\n')}\n` : '';
@@ -175,19 +214,43 @@ export function init() {
     };
 
     // --- 核心逻辑：添加行 ---
-    const addRow = (key = '', val = '') => {
+    const addRow = (key = '', val = '', defaultOp = 'EQ') => {
         const row = document.createElement('div');
         row.className = 'filter-row';
 
-        // 字段名输入
+        // 1. 字段名
         const inputKey = document.createElement('input');
         inputKey.type = 'text';
         inputKey.className = 'input-key';
-        inputKey.placeholder = '字段名 (key)';
+        inputKey.placeholder = '字段名';
         inputKey.value = key;
         inputKey.addEventListener('input', generate);
 
-        // 类型选择
+        // 2. 操作符选择
+        const selectOp = document.createElement('select');
+        selectOp.className = 'select-op';
+        for (let op in OPERATORS) {
+            const opt = document.createElement('option');
+            opt.value = op;
+            opt.textContent = OPERATORS[op].label;
+            if (op === defaultOp) opt.selected = true;
+            selectOp.appendChild(opt);
+        }
+        selectOp.addEventListener('change', () => {
+            const op = selectOp.value;
+            // 针对 In/Not In 修改占位符提示
+            if (op === 'IN' || op === 'NIN') {
+                inputValue.placeholder = '值1, 值2, ...';
+            } else if (op === 'EXISTS') {
+                inputValue.placeholder = 'true / false';
+                inputValue.value = 'true'; // 默认填 true
+            } else {
+                inputValue.placeholder = '字段值';
+            }
+            generate();
+        });
+
+        // 3. 类型选择
         const selectType = document.createElement('select');
         selectType.className = 'select-type';
         for (let t in TYPES) {
@@ -196,22 +259,9 @@ export function init() {
             opt.textContent = TYPES[t];
             selectType.appendChild(opt);
         }
-        selectType.addEventListener('change', () => {
-            // 类型改变时，可能需要改变值的输入控件（比如 Boolean 变成下拉，Null 隐藏输入）
-            // 这里为了简化代码，除了 Null 外统一用 Text 输入，但在 generate 里处理
-            if (selectType.value === 'NULL') {
-                inputValue.style.visibility = 'hidden';
-            } else if (selectType.value === 'BOOL') {
-                inputValue.placeholder = 'true / false';
-                inputValue.style.visibility = 'visible';
-            } else {
-                inputValue.placeholder = '字段值';
-                inputValue.style.visibility = 'visible';
-            }
-            generate();
-        });
+        selectType.addEventListener('change', generate);
 
-        // 字段值输入
+        // 4. 字段值
         const inputValue = document.createElement('input');
         inputValue.type = 'text';
         inputValue.className = 'input-val';
@@ -219,7 +269,7 @@ export function init() {
         inputValue.value = val;
         inputValue.addEventListener('input', generate);
 
-        // 删除按钮
+        // 5. 删除按钮
         const btnDel = document.createElement('button');
         btnDel.className = 'btn-del';
         btnDel.innerHTML = '×';
@@ -230,23 +280,22 @@ export function init() {
         };
 
         row.appendChild(inputKey);
+        row.appendChild(selectOp);
         row.appendChild(selectType);
         row.appendChild(inputValue);
         row.appendChild(btnDel);
 
         container.appendChild(row);
 
-        // 自动聚焦新行的key
+        // 自动聚焦
         inputKey.focus();
-
-        generate(); // 刷新一次
+        generate();
     };
 
     // --- 事件绑定 ---
     btnAdd.onclick = () => addRow();
     collInput.addEventListener('input', generate);
 
-    // 复制功能
     btnCopy.onclick = () => {
         navigator.clipboard.writeText(resultCode.textContent).then(() => {
             const old = btnCopy.textContent;
@@ -255,6 +304,6 @@ export function init() {
         });
     };
 
-    // 初始化：默认加一行空的
-    addRow('_id', '');
+    // 初始化默认行
+    addRow('_id', '', 'EQ');
 }
