@@ -70,12 +70,16 @@ export function render() {
                 white-space: pre-wrap; word-break: break-all; overflow-y: auto;
                 position: relative; min-height: 100px;
             }
-            .copy-btn {
-                position: absolute; top: 10px; right: 10px;
-                padding: 4px 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-                color: #fff; border-radius: 4px; font-size: 12px; cursor: pointer;
+            
+            /* 右上角按钮组 */
+            .result-actions {
+                position: absolute; top: 10px; right: 10px; display: flex; gap: 8px;
             }
-            .copy-btn:hover { background: rgba(255,255,255,0.2); }
+            .action-btn {
+                padding: 4px 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+                color: #fff; border-radius: 4px; font-size: 12px; cursor: pointer; transition: background 0.2s;
+            }
+            .action-btn:hover { background: rgba(255,255,255,0.2); }
         </style>
 
         <div class="tool-box builder-container">
@@ -121,7 +125,10 @@ export function render() {
 
             <div class="result-box">
                 <div id="result-code">db.users.find({})</div>
-                <button id="btn-copy" class="copy-btn">复制</button>
+                <div class="result-actions">
+                    <button id="btn-compress" class="action-btn" title="压缩为单行">压缩</button>
+                    <button id="btn-copy" class="action-btn">复制</button>
+                </div>
             </div>
         </div>
     `;
@@ -133,6 +140,7 @@ export function init() {
     const sortContainer = document.getElementById('sort-container');
     const resultCode = document.getElementById('result-code');
     const btnCopy = document.getElementById('btn-copy');
+    const btnCompress = document.getElementById('btn-compress');
 
     // 按钮
     const btnAddFilter = document.getElementById('btn-add-filter');
@@ -147,7 +155,7 @@ export function init() {
         STRING: 'String',
         NUMBER: 'Number',
         BOOL: 'Boolean',
-        DATE: 'Date (ISODate)', // 新增
+        DATE: 'Date (ISODate)',
         OBJECTID: 'ObjectId',
         REGEX: 'RegExp',
         NULL: 'Null'
@@ -174,7 +182,7 @@ export function init() {
             case 'NUMBER': return val === '' ? '0' : val;
             case 'BOOL': return (val === 'true' || val === '1') ? 'true' : 'false';
             case 'OBJECTID': return `ObjectId("${val}")`;
-            case 'DATE': return `ISODate("${val}")`; // 新增处理
+            case 'DATE': return `ISODate("${val}")`;
             case 'REGEX': return `/${val}/`;
             case 'NULL': return 'null';
             default: return `"${val}"`;
@@ -352,12 +360,22 @@ export function init() {
     inputLimit.addEventListener('input', generate);
     inputSkip.addEventListener('input', generate);
 
+    // 复制功能
     btnCopy.onclick = () => {
         navigator.clipboard.writeText(resultCode.textContent).then(() => {
             const old = btnCopy.textContent;
             btnCopy.textContent = '已复制';
             setTimeout(() => btnCopy.textContent = old, 1000);
         });
+    };
+
+    // 压缩功能
+    btnCompress.onclick = () => {
+        const originalText = resultCode.textContent;
+        // 去除换行符和多余空格
+        // 正则解释：\s*[\r\n]+\s* 匹配所有换行符及其前后的空格
+        const compressed = originalText.replace(/\s*[\r\n]+\s*/g, '');
+        resultCode.textContent = compressed;
     };
 
     // 初始化默认行
