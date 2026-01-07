@@ -111,7 +111,13 @@ export default [
     {
         id: 'remove-bg',
         name: '智能抠图/去底',
-        icon: '❀',
+        icon: '❀ ',
         file: 'remove_bg.js'
+    },
+    {
+        id: 'zhuyin',
+        name: '汉字转注音',
+        icon: 'ㄓ ',
+        file: 'zhuyin.js'
     },
 ];
