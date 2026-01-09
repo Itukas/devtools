@@ -2,8 +2,19 @@ export function render() {
     return `
         <style>
             .sql-container { display: flex; flex-direction: column; height: 100%; gap: 15px; }
-            .action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
             
+            /* 工具栏 */
+            .action-bar {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                flex-wrap: wrap;
+                background: #f8fafc;
+                padding: 10px;
+                border-radius: 6px;
+                border: 1px solid #e2e8f0;
+            }
+
             /* 输入区 */
             .input-area {
                 font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -13,8 +24,24 @@ export function render() {
                 border: 1px solid #cbd5e1;
                 border-radius: 6px;
                 padding: 10px;
-                min-height: 150px;
+                height: 150px; /* 固定高度 */
                 resize: vertical;
+            }
+
+            /* 配置行（新增） */
+            .config-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-size: 13px;
+                color: #475569;
+            }
+            .table-name-input {
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 4px 8px;
+                width: 150px;
+                font-family: monospace;
             }
 
             /* 输出表格区 */
@@ -24,6 +51,7 @@ export function render() {
                 border: 1px solid #e2e8f0;
                 border-radius: 6px;
                 background: #fff;
+                position: relative;
             }
             
             .result-table {
@@ -31,6 +59,7 @@ export function render() {
                 border-collapse: collapse;
                 font-size: 13px;
                 font-family: sans-serif;
+                min-width: 600px;
             }
             .result-table th, .result-table td {
                 border: 1px solid #e2e8f0;
@@ -60,11 +89,27 @@ export function render() {
             }
             
             .empty-tip {
-                text-align: center;
-                color: #94a3b8;
-                margin-top: 50px;
-                font-size: 14px;
+                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                color: #94a3b8; font-size: 14px; text-align: center;
             }
+
+            /* 按钮样式 */
+            .btn {
+                padding: 6px 12px;
+                border-radius: 4px;
+                border: 1px solid #cbd5e1;
+                background: #fff;
+                cursor: pointer;
+                font-size: 12px;
+                color: #334155;
+                transition: all 0.1s;
+            }
+            .btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+            .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+            .btn.primary:hover { background: #1d4ed8; }
+            .btn.danger { background: #fee2e2; color: #ef4444; border-color: #fecaca; }
+            .btn.danger:hover { background: #fecaca; }
+
         </style>
 
         <div class="tool-box sql-container">
@@ -73,14 +118,25 @@ export function render() {
             <textarea id="sql-input" class="input-area" placeholder="+-----+-------------+\n| id  | name        |\n+-----+-------------+\n| 1   | Example     |\n+-----+-------------+"></textarea>
 
             <div class="action-bar">
-                <button id="btn-parse" style="background:#2563eb;">⚡ 解析并预览</button>
-                <button id="btn-copy-csv" class="secondary">📄 复制 CSV</button>
-                <button id="btn-copy-json" class="secondary">📦 复制 JSON</button>
-                <button id="btn-clear" class="secondary" style="background:#ef4444; margin-left:auto;">清空</button>
+                <div class="config-row">
+                    <span>表名:</span>
+                    <input type="text" id="table-name" class="table-name-input" value="my_table" placeholder="table_name">
+                </div>
+                <div style="width: 1px; height: 20px; background: #e2e8f0; margin: 0 5px;"></div>
+                
+                <button id="btn-copy-csv" class="btn">📄 CSV</button>
+                <button id="btn-copy-json" class="btn">📦 JSON</button>
+                <button id="btn-copy-insert" class="btn primary">📥 复制 Insert</button>
+                
+                <button id="btn-clear" class="btn danger" style="margin-left:auto;">清空</button>
+            </div>
+            
+            <div style="font-size:12px; color:#64748b; margin-top:-10px; margin-bottom:5px;">
+                * 自动识别数字和字符串，空值视为 NULL
             </div>
 
             <div id="output-area" class="table-wrapper">
-                <div class="empty-tip">等待解析...</div>
+                <div class="empty-tip">等待输入...</div>
             </div>
         </div>
     `;
@@ -89,9 +145,12 @@ export function render() {
 export function init() {
     const input = document.getElementById('sql-input');
     const outputDiv = document.getElementById('output-area');
-    const btnParse = document.getElementById('btn-parse');
+    const tableNameInput = document.getElementById('table-name');
+
     const btnCsv = document.getElementById('btn-copy-csv');
     const btnJson = document.getElementById('btn-copy-json');
+    const btnInsert = document.getElementById('btn-copy-insert');
+    const btnClear = document.getElementById('btn-clear');
 
     let parsedData = { headers: [], rows: [] };
 
@@ -102,7 +161,6 @@ export function init() {
         const lines = text.trim().split('\n');
         const headers = [];
         const rows = [];
-        let isHeaderFound = false;
 
         // 过滤掉边框行 (以 + 开头)
         const contentLines = lines.filter(line => !line.trim().startsWith('+'));
@@ -130,36 +188,29 @@ export function init() {
     // --- 渲染表格 ---
     const renderTable = (data) => {
         if (!data || data.headers.length === 0) {
-            outputDiv.innerHTML = '<div class="empty-tip">无法识别表格格式，请确保包含边框(+---+)或分隔符(|)</div>';
+            outputDiv.innerHTML = '<div class="empty-tip">无法识别表格格式<br>请确保包含分隔符 |</div>';
             return;
         }
 
         let html = '<table class="result-table"><thead><tr>';
-
-        // 渲染表头
-        data.headers.forEach(h => {
-            html += `<th>${escapeHtml(h)}</th>`;
-        });
+        data.headers.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
         html += '</tr></thead><tbody>';
 
-        // 渲染数据
         data.rows.forEach(row => {
             html += '<tr>';
             row.forEach(cell => {
-                // 尝试检测是否为 JSON 字符串，如果是，美化显示
                 let displayContent = escapeHtml(cell);
-                if (cell.startsWith('{') && cell.endsWith('}')) {
-                    try {
-                        // 校验是否为有效JSON
-                        JSON.parse(cell);
-                        displayContent = `<div class="json-cell">${escapeHtml(cell)}</div>`;
-                    } catch(e) {}
+                // 简单 JSON 检测
+                if ((cell.startsWith('{') && cell.endsWith('}')) || (cell.startsWith('[') && cell.endsWith(']'))) {
+                    try { JSON.parse(cell); displayContent = `<div class="json-cell">${escapeHtml(cell)}</div>`; } catch(e) {}
+                }
+                if (cell === '' || cell === 'NULL') {
+                    displayContent = '<span style="color:#94a3b8; font-style:italic;">NULL</span>';
                 }
                 html += `<td>${displayContent}</td>`;
             });
             html += '</tr>';
         });
-
         html += '</tbody></table>';
         outputDiv.innerHTML = html;
     };
@@ -169,8 +220,7 @@ export function init() {
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     };
 
-    // --- 事件处理 ---
-
+    // --- 自动处理 ---
     const handleParse = () => {
         const text = input.value;
         const result = parseASCII(text);
@@ -179,72 +229,109 @@ export function init() {
             renderTable(result);
         } else {
             parsedData = { headers: [], rows: [] };
-            outputDiv.innerHTML = '<div class="empty-tip">请输入有效的内容</div>';
+            if(text.trim()) outputDiv.innerHTML = '<div class="empty-tip">格式错误</div>';
+            else outputDiv.innerHTML = '<div class="empty-tip">等待输入...</div>';
         }
     };
 
-    // 自动解析 (防抖)
     let timer = null;
     input.addEventListener('input', () => {
         if(timer) clearTimeout(timer);
-        timer = setTimeout(handleParse, 500);
+        timer = setTimeout(handleParse, 300);
     });
 
-    btnParse.onclick = handleParse;
-
-    document.getElementById('btn-clear').onclick = () => {
+    btnClear.onclick = () => {
         input.value = '';
         parsedData = { headers: [], rows: [] };
-        outputDiv.innerHTML = '<div class="empty-tip">等待解析...</div>';
+        outputDiv.innerHTML = '<div class="empty-tip">等待输入...</div>';
     };
 
-    // 导出 CSV
-    btnCsv.onclick = () => {
-        if (parsedData.headers.length === 0) return alert("没有数据可复制");
+    // --- 复制功能封装 ---
+    const copyToClipboard = (text, btn) => {
+        if (!text) return alert("没有内容可复制");
+        navigator.clipboard.writeText(text).then(() => {
+            const originText = btn.textContent;
+            btn.textContent = '✅ 已复制';
+            btn.style.borderColor = '#16a34a';
+            btn.style.color = '#16a34a';
+            setTimeout(() => {
+                btn.textContent = originText;
+                btn.style.borderColor = '';
+                btn.style.color = '';
+            }, 1000);
+        });
+    };
 
-        let csvContent = parsedData.headers.join(',') + '\n';
+    // 1. CSV
+    btnCsv.onclick = () => {
+        if (parsedData.headers.length === 0) return;
+        let content = parsedData.headers.join(',') + '\n';
         parsedData.rows.forEach(row => {
-            // 处理包含逗号的内容，包裹引号
-            const processedRow = row.map(cell => {
-                if (cell.includes(',') || cell.includes('"')) {
+            content += row.map(cell => {
+                if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
                     return `"${cell.replace(/"/g, '""')}"`;
                 }
                 return cell;
-            });
-            csvContent += processedRow.join(',') + '\n';
+            }).join(',') + '\n';
         });
-
-        navigator.clipboard.writeText(csvContent).then(() => {
-            const originText = btnCsv.textContent;
-            btnCsv.textContent = '✅ 已复制';
-            setTimeout(() => btnCsv.textContent = originText, 1000);
-        });
+        copyToClipboard(content, btnCsv);
     };
 
-    // 导出 JSON
+    // 2. JSON
     btnJson.onclick = () => {
-        if (parsedData.headers.length === 0) return alert("没有数据可复制");
-
-        const jsonArr = parsedData.rows.map(row => {
+        if (parsedData.headers.length === 0) return;
+        const arr = parsedData.rows.map(row => {
             let obj = {};
-            parsedData.headers.forEach((key, i) => {
-                // 尝试解析单元格内的 JSON 字符串，变成真正的对象
+            parsedData.headers.forEach((k, i) => {
                 let val = row[i];
-                try {
-                    if (val.startsWith('{') || val.startsWith('[')) {
-                        val = JSON.parse(val);
-                    }
-                } catch(e) {}
-                obj[key] = val;
+                if (val === 'NULL') val = null;
+                // 尝试转数字
+                if (!isNaN(val) && val !== '' && val !== null && !val.startsWith('0')) val = Number(val);
+                // 尝试转JSON对象
+                try { if(val && (val.startsWith('{')||val.startsWith('['))) val = JSON.parse(val); } catch(e){}
+                obj[k] = val;
             });
             return obj;
         });
+        copyToClipboard(JSON.stringify(arr, null, 2), btnJson);
+    };
 
-        const jsonStr = JSON.stringify(jsonArr, null, 2);
-        navigator.clipboard.writeText(jsonStr).then(() => {
-            const originText = btnJson.textContent;
-            btnJson.textContent = '✅ 已复制';
-            setTimeout(() => btnJson.textContent = originText, 1000);
+    // 3. Insert 语句 (核心功能)
+    btnInsert.onclick = () => {
+        if (parsedData.headers.length === 0) return;
+
+        const tableName = tableNameInput.value.trim() || 'my_table';
+        const cols = parsedData.headers.map(h => `\`${h}\``).join(', '); // 加反引号防关键字
+
+        // 生成批量 Insert 语句
+        // 格式: INSERT INTO `table` (`col1`, `col2`) VALUES (val1, val2), (val3, val4);
+
+        let sql = `INSERT INTO \`${tableName}\` (${cols}) VALUES\n`;
+
+        const valueRows = parsedData.rows.map(row => {
+            const values = row.map(cell => {
+                // 处理 NULL
+                if (cell === 'NULL' || cell === undefined) return 'NULL';
+
+                // 处理数字 (简单的判断：纯数字且不以0开头(除非是0本身))
+                // 注意：身份证号、电话号码等长数字可能被当成数字处理，导致精度丢失或格式错误。
+                // 保险起见，只有非常像数字的才转，或者默认全字符串？
+                // 这里采用一个折中方案：如果是纯数字且长度<16，视为数字；否则视为字符串。
+
+                const isNum = /^-?\d+(\.\d+)?$/.test(cell) && cell.length < 16 && !(cell.length > 1 && cell.startsWith('0') && !cell.startsWith('0.'));
+
+                if (isNum) {
+                    return cell;
+                } else {
+                    // 字符串：转义单引号
+                    return `'${cell.replace(/'/g, "\\'")}'`;
+                }
+            });
+            return `(${values.join(', ')})`;
         });
+
+        sql += valueRows.join(',\n') + ';';
+
+        copyToClipboard(sql, btnInsert);
     };
 }
