@@ -292,8 +292,8 @@ export function init() {
 
             // 4. 设置下载链接和文件名
             btnDownload.href = url;
-            // 格式：yyyy_MM_dd_hhmmss_宽_高.后缀
-            btnDownload.download = `${dateStr}_${tempImg.width}_${tempImg.height}.${ext}`;
+            // 格式：yyyyMMddhhmmss_高x宽.后缀
+            btnDownload.download = `${dateStr}_${tempImg.height}x${tempImg.width}.${ext}`;
         };
         tempImg.src = url;
     };
