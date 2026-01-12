@@ -89,6 +89,9 @@ export function render() {
                     <input type="text" id="coll-name" class="input-sm" value="my_collection" placeholder="db.xxx">
                 </div>
                 <div style="display:flex; gap:10px;">
+                    <input type="file" id="file-upload" accept=".txt,.json,.log,.js" style="display:none" />
+                    <button id="btn-upload" class="secondary" style="background:#64748b;">📂 导入文件</button>
+                    
                     <button id="btn-parse" style="background:#2563eb;">⚡ 解析</button>
                     <button id="btn-clear" class="secondary" style="background:#ef4444;">清空</button>
                 </div>
@@ -97,9 +100,9 @@ export function render() {
             <div class="split-view">
                 <div class="editor-box" style="flex: 0 0 40%;">
                     <div class="box-header">
-                        <span>原始数据 (Mongo Shell Format)</span>
+                        <span>原始数据 (Mongo Shell / Escaped JSON)</span>
                     </div>
-                    <textarea id="mongo-input" class="raw-input" placeholder='粘贴形如 { "_id" : ObjectId("..."), ... } 的数据'></textarea>
+                    <textarea id="mongo-input" class="raw-input" placeholder='支持粘贴或上传 .txt / .json / .log 文件\n会自动去除转义符 (如 \")'></textarea>
                 </div>
 
                 <div class="editor-box" style="flex:1;">
@@ -110,7 +113,7 @@ export function render() {
                             <label style="cursor:pointer;"><input type="radio" name="view-type" value="insert"> Insert 语句</label>
                         </div>
                         <div style="display:flex; gap:5px;">
-                             <button id="btn-csv" class="secondary" style="padding:2px 10px; font-size:12px; display:none;">📊 导出 CSV</button>
+                             <button id="btn-csv" class="secondary" style="padding:2px 10px; font-size:12px; display:none; background:#10b981; color:white;">📊 导出 CSV</button>
                              <button id="btn-copy" class="secondary" style="padding:2px 10px; font-size:12px;">📄 复制</button>
                         </div>
                     </div>
@@ -141,10 +144,14 @@ export function init() {
     const lineGutter = document.getElementById('line-gutter');
     const collNameInput = document.getElementById('coll-name');
     const statusMsg = document.getElementById('status-msg');
+
+    // Buttons
     const btnParse = document.getElementById('btn-parse');
     const btnClear = document.getElementById('btn-clear');
     const btnCopy = document.getElementById('btn-copy');
     const btnCsv = document.getElementById('btn-csv');
+    const btnUpload = document.getElementById('btn-upload');
+    const fileUpload = document.getElementById('file-upload');
     const radios = document.getElementsByName('view-type');
 
     // View Containers
@@ -154,18 +161,18 @@ export function init() {
     const tableBody = document.getElementById('table-body');
 
     // State
-    let cachedJsonObj = null; // 解析后的 JSON 对象（可能是数组或对象）
-    let cachedJsonRaw = '';   // 字符串化的 JSON
-    let cachedInsertRaw = ''; // Insert 语句
-    let currentRaw = '';      // 当前显示的代码字符串
+    let cachedJsonObj = null;
+    let cachedJsonRaw = '';
+    let cachedInsertRaw = '';
+    let currentRaw = '';
 
     // Table State
-    let tableData = [];       // 扁平化的对象数组（用于渲染）
-    let tableColumns = [];    // 列名
-    let sortConfig = { key: null, direction: 'asc' }; // 排序配置
-    let filters = {};         // 筛选配置 { colName: 'filterText' }
+    let tableData = [];
+    let tableColumns = [];
+    let sortConfig = { key: null, direction: 'asc' };
+    let filters = {};
 
-    // --- 1. 高亮引擎 (保持不变) ---
+    // --- 1. 高亮引擎 ---
     const highlightCode = (code) => {
         if (!code) return '';
         const escape = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -189,12 +196,11 @@ export function init() {
     const updateView = () => {
         const type = document.querySelector('input[name="view-type"]:checked').value;
 
-        // 显示/隐藏控制
         if (type === 'table') {
             codeWrapper.style.display = 'none';
             tableWrapper.style.display = 'block';
             btnCsv.style.display = 'block';
-            renderTable(); // 渲染表格
+            renderTable();
         } else {
             codeWrapper.style.display = 'flex';
             tableWrapper.style.display = 'none';
@@ -212,49 +218,88 @@ export function init() {
         }
     };
 
-    // --- 3. 解析逻辑 ---
+    // --- 3. 核心：解析逻辑 (含自动去转义) ---
+
+    // 内部辅助：单次解析尝试，负责处理 Mongo Shell 语法和非标 JSON 修复
+    const attemptParse = (str) => {
+        // 预处理 Mongo Shell 格式为标准 JSON
+        let jsonStr = str
+            .replace(/ObjectId\s*\(\s*["']([^"']+)["']\s*\)/g, '"$1"')
+            .replace(/ISODate\s*\(\s*["']([^"']+)["']\s*\)/g, '"$1"')
+            .replace(/NumberLong\s*\(\s*["']?(\d+)["']?\s*\)/g, '"$1"')
+            .replace(/NumberInt\s*\(\s*["']?(\d+)["']?\s*\)/g, '$1')
+            .replace(/NumberDecimal\s*\(\s*["']([^"']+)["']\s*\)/g, '"$1"');
+
+        // 容错：修复多条对象堆叠的情况 ( }{ -> },{ )
+        if (!jsonStr.startsWith('[') && jsonStr.includes('}{')) {
+            jsonStr = `[${jsonStr.replace(/}\s*{/g, '},{')}]`;
+        }
+
+        return JSON.parse(jsonStr);
+    };
+
     const parseMongoData = () => {
         const raw = input.value.trim();
         if (!raw) return;
 
         try {
-            // 预处理 Mongo Shell 格式为标准 JSON
-            let jsonStr = raw
-                .replace(/ObjectId\s*\(\s*["']([^"']+)["']\s*\)/g, '"$1"') // ObjectId -> String
-                .replace(/ISODate\s*\(\s*["']([^"']+)["']\s*\)/g, '"$1"')  // ISODate -> String
-                .replace(/NumberLong\s*\(\s*["']?(\d+)["']?\s*\)/g, '"$1"')
-                .replace(/NumberInt\s*\(\s*["']?(\d+)["']?\s*\)/g, '$1')
-                .replace(/NumberDecimal\s*\(\s*["']([^"']+)["']\s*\)/g, '"$1"');
+            let jsonObj;
+            let successMsgExtra = '';
 
-            // 尝试解析。如果用户输入的是多个对象（Mongo Shell常见的输出），需要包裹在 [] 中
-            // 简单的检测方法：如果不是 [ 开头，但看起来像对象，就包一层
-            if (!jsonStr.startsWith('[') && jsonStr.includes('}{')) {
-                // 替换 }{ 为 },{
-                jsonStr = `[${jsonStr.replace(/}\s*{/g, '},{')}]`;
-            } else if (!jsonStr.startsWith('[') && !jsonStr.startsWith('{')) {
-                // 可能是多行不带逗号的情况
-                // 暂不处理极其复杂的格式，假设是合法的 JSON 或 Objects
+            try {
+                // 尝试1：直接解析
+                jsonObj = attemptParse(raw);
+
+                // 尝试2：如果解析出来是 String，说明输入是被 stringify 过的 (如 "{\"a\":1}")
+                // 此时我们需要对这个 String 再解析一次，才能得到对象
+                if (typeof jsonObj === 'string') {
+                    try {
+                        const inner = attemptParse(jsonObj);
+                        if (typeof inner === 'object') {
+                            jsonObj = inner;
+                            successMsgExtra = ' (已自动展开 Stringified JSON)';
+                        }
+                    } catch(e) {
+                        // 二次解析失败，保持原样（可能它本身就是个字符串）
+                    }
+                }
+
+            } catch (e) {
+                // 尝试3：如果包含 \" ，尝试暴力去转义后解析
+                // 场景：日志里的 {\"a\": 1} (没有首尾引号，但中间被转义了)
+                if (raw.includes('\\"')) {
+                    // 简单的反转义： \" -> " , \\ -> \
+                    const unescaped = raw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                    try {
+                        jsonObj = attemptParse(unescaped);
+                        successMsgExtra = ' (已自动去除转义)';
+                    } catch (e2) {
+                        throw e; // 抛出原始错误
+                    }
+                } else {
+                    throw e;
+                }
             }
 
-            const jsonObj = JSON.parse(jsonStr);
+            // 解析成功，更新状态
             cachedJsonObj = jsonObj;
-
-            // 准备数据：如果是单个对象，转为数组
             tableData = Array.isArray(jsonObj) ? jsonObj : [jsonObj];
 
-            // 提取所有可能的列名 (Keys)
+            // 提取 Key
             const keys = new Set();
-            tableData.forEach(item => Object.keys(item).forEach(k => keys.add(k)));
+            tableData.forEach(item => {
+                if(item && typeof item === 'object') {
+                    Object.keys(item).forEach(k => keys.add(k));
+                }
+            });
             tableColumns = Array.from(keys);
 
-            // 生成缓存字符串
             cachedJsonRaw = JSON.stringify(jsonObj, null, 4);
 
             const coll = collNameInput.value || 'my_collection';
-            const formattedRaw = formatRawMongoString(raw);
-            cachedInsertRaw = `db.${coll}.insert(\n${formattedRaw}\n);`;
+            cachedInsertRaw = `db.${coll}.insert(\n${cachedJsonRaw}\n);`;
 
-            statusMsg.innerHTML = `<span style="color:#16a34a">✅ 解析成功: ${tableData.length} 条记录</span>`;
+            statusMsg.innerHTML = `<span style="color:#16a34a">✅ 解析成功: ${tableData.length} 条记录${successMsgExtra}</span>`;
             updateView();
 
         } catch (e) {
@@ -264,12 +309,12 @@ export function init() {
             tableData = [];
             statusMsg.innerHTML = `<span style="color:#dc2626">❌ 解析失败: ${e.message}</span>`;
             if(document.querySelector('input[name="view-type"]:checked').value !== 'table') {
-                resultView.innerHTML = `<span style="color:#dc2626">无法解析，请检查 JSON 格式。\n${e.message}</span>`;
+                resultView.innerHTML = `<span style="color:#dc2626">无法解析，请检查数据格式。\n${e.message}</span>`;
             }
         }
     };
 
-    // --- 4. 表格渲染核心逻辑 ---
+    // --- 4. 表格渲染 (保持不变) ---
     const renderTable = () => {
         if (!tableData || tableData.length === 0) {
             tableHead.innerHTML = '';
@@ -277,7 +322,6 @@ export function init() {
             return;
         }
 
-        // 1. 处理数据：筛选 -> 排序
         let displayData = tableData.filter(row => {
             return Object.keys(filters).every(key => {
                 const filterVal = filters[key].toLowerCase();
@@ -291,14 +335,12 @@ export function init() {
             displayData.sort((a, b) => {
                 const valA = a[sortConfig.key];
                 const valB = b[sortConfig.key];
-                // 简单的比较逻辑
                 if (valA === valB) return 0;
                 const comp = (valA > valB) ? 1 : -1;
                 return sortConfig.direction === 'asc' ? comp : -comp;
             });
         }
 
-        // 2. 渲染表头 (包含排序点击区 和 筛选输入框)
         let theadHtml = '<tr>';
         tableColumns.forEach(col => {
             let sortClass = '';
@@ -320,12 +362,10 @@ export function init() {
         theadHtml += '</tr>';
         tableHead.innerHTML = theadHtml;
 
-        // 绑定表头事件 (点击排序)
         tableHead.querySelectorAll('.th-content').forEach(el => {
             el.onclick = () => {
                 const key = el.dataset.key;
                 if (sortConfig.key === key) {
-                    // 切换方向
                     sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
                 } else {
                     sortConfig.key = key;
@@ -335,20 +375,15 @@ export function init() {
             };
         });
 
-        // 绑定筛选事件 (输入)
         tableHead.querySelectorAll('input').forEach(input => {
             input.oninput = (e) => {
                 const key = e.target.dataset.filterKey;
                 filters[key] = e.target.value.trim();
-                // 重新渲染 Body，保留 Header 焦点？不，全量渲染比较简单，但会导致焦点丢失
-                // 优化：只重新渲染 Body。但是数据变了，没关系，输入框在 Header，不影响。
                 renderTableBody(displayData);
             };
-            // 阻止点击输入框触发排序
             input.onclick = (e) => e.stopPropagation();
         });
 
-        // 3. 渲染表体
         renderTableBody(displayData);
     };
 
@@ -358,13 +393,10 @@ export function init() {
             return;
         }
 
-        // 为了性能，用 innerHTML 拼接
-        // 限制渲染行数？暂不限制，假设数据量不大 (<2000)
         const html = data.map(row => {
             let tr = '<tr>';
             tableColumns.forEach(col => {
                 let val = row[col];
-                // 处理对象和数组的显示
                 if (typeof val === 'object' && val !== null) {
                     val = JSON.stringify(val);
                 } else if (val === undefined || val === null) {
@@ -378,13 +410,10 @@ export function init() {
         tableBody.innerHTML = html;
     };
 
-    // --- 5. CSV 导出逻辑 ---
+    // --- 5. CSV 导出 ---
     const exportCSV = () => {
         if (!tableData || tableData.length === 0) return;
 
-        // 使用当前筛选排序后的数据，还是原始数据？通常导出当前视图的数据。
-        // 为了简单，我们重新跑一次筛选逻辑，或者复用 displayData 如果它是全局的。
-        // 这里重新基于 filters 生成一次数据
         let exportData = tableData.filter(row => {
             return Object.keys(filters).every(key => {
                 const filterVal = filters[key].toLowerCase();
@@ -402,7 +431,6 @@ export function init() {
             });
         }
 
-        // 生成 CSV 内容
         const header = tableColumns.join(',');
         const rows = exportData.map(row => {
             return tableColumns.map(col => {
@@ -410,7 +438,6 @@ export function init() {
                 if (val === undefined || val === null) val = '';
                 if (typeof val === 'object') val = JSON.stringify(val);
                 val = String(val);
-                // 处理 CSV 转义：如果有逗号、引号、换行，需用双引号包裹，并将内部引号双写
                 if (val.search(/("|,|\n)/g) >= 0) {
                     val = `"${val.replace(/"/g, '""')}"`;
                 }
@@ -418,7 +445,7 @@ export function init() {
             }).join(',');
         });
 
-        const csvContent = "\uFEFF" + [header, ...rows].join('\n'); // 添加 BOM 防止乱码
+        const csvContent = "\uFEFF" + [header, ...rows].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -430,20 +457,36 @@ export function init() {
         document.body.removeChild(link);
     };
 
-    // --- 辅助：Mongo Insert 格式化 (简单实现) ---
-    const formatRawMongoString = (str) => {
-        // 简易格式化，仅用于 insert 语句展示
-        // 真实情况可能很复杂，这里只做简单的换行处理
-        return str; // 暂且返回原始内容，因为用户贴进来的通常已经是格式化好的，或者乱的也没法简单修
-    };
-
     // --- 事件绑定 ---
+    btnUpload.onclick = () => fileUpload.click();
+
+    fileUpload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        statusMsg.innerHTML = '<span style="color:#64748b;">⏳ 正在读取文件...</span>';
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            input.value = event.target.result;
+            // 自动切到表格视图
+            document.querySelector('input[name="view-type"][value="table"]').checked = true;
+            parseMongoData();
+            fileUpload.value = '';
+        };
+        reader.onerror = () => {
+            statusMsg.innerHTML = '<span style="color:#dc2626">❌ 读取文件失败</span>';
+        };
+        reader.readAsText(file);
+    });
+
     btnParse.onclick = parseMongoData;
     let timer;
     input.addEventListener('input', () => {
         if(timer) clearTimeout(timer);
         timer = setTimeout(parseMongoData, 500);
     });
+
     radios.forEach(r => r.addEventListener('change', updateView));
     collNameInput.addEventListener('input', () => { if (cachedJsonRaw) parseMongoData(); });
 
@@ -472,6 +515,5 @@ export function init() {
         });
     };
 
-    // 滚动同步
     resultView.addEventListener('scroll', () => { lineGutter.scrollTop = resultView.scrollTop; });
 }
