@@ -276,15 +276,27 @@ export function init() {
         compSize.textContent = sizeText;
 
         const tempImg = new Image();
-        tempImg.onload = () => { compDims.textContent = `${tempImg.width} x ${tempImg.height}`; };
+        tempImg.onload = () => {
+            // 1. 更新界面尺寸显示
+            compDims.textContent = `${tempImg.width} x ${tempImg.height}`;
+
+            // 2. 生成时间戳 yyyy_MM_dd_hhmmss
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const dateStr = `${now.getFullYear()}_${pad(now.getMonth() + 1)}_${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+            // 3. 获取后缀名
+            let ext = blob.type.split('/')[1];
+            if (mimeSelect.value !== 'auto') ext = mimeSelect.value.split('/')[1];
+            if (ext === 'jpeg') ext = 'jpg'; // 习惯性优化
+
+            // 4. 设置下载链接和文件名
+            btnDownload.href = url;
+            // 格式：yyyy_MM_dd_hhmmss_宽_高.后缀
+            btnDownload.download = `${dateStr}_${tempImg.width}_${tempImg.height}.${ext}`;
+        };
         tempImg.src = url;
-
-        let ext = blob.type.split('/')[1];
-        if (mimeSelect.value !== 'auto') ext = mimeSelect.value.split('/')[1];
-        btnDownload.href = url;
-        btnDownload.download = `processed_${Date.now()}.${ext}`;
     };
-
     const doCompress = () => {
         if (!currentFile) return;
 
