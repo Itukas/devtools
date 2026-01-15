@@ -3,6 +3,8 @@ import toolsConfig from './config.js';
 const navList = document.getElementById('nav-list');
 const toolTitle = document.getElementById('tool-title');
 const toolContainer = document.getElementById('tool-container');
+const sidebar = document.querySelector('.sidebar');
+const sidebarToggle = document.getElementById('sidebar-toggle');
 
 // 1. 初始化导航菜单
 function initNav() {
@@ -35,8 +37,9 @@ function createNavBtn(item, isChild) {
     const btn = document.createElement('div');
     btn.className = 'nav-item';
 
-    // ✅ 关键修改：绑定 ID
+    // ✅ 关键修改：绑定 ID 和图标
     btn.dataset.id = item.id;
+    btn.dataset.icon = item.icon || '•';
 
     if (isChild) {
         btn.style.paddingLeft = '30px';
@@ -70,8 +73,16 @@ async function loadTool(tool, navItem) {
     }
 }
 
+// 3. 侧边栏展开/收缩功能
+function initSidebarToggle() {
+    sidebarToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+    });
+}
+
 // 启动初始化
 initNav();
+initSidebarToggle();
 
 // ✅ 关键修改：默认点击 JSON 工具
 setTimeout(() => {
