@@ -49,6 +49,12 @@ export default [
         file: 'img_base64.js'
     },
     {
+        id: 'file-encoding',
+        name: '文件编码检测',
+        icon: '🔍',
+        file: 'file_encoding.js'
+    },
+    {
         id: 'mongo',
         name: 'Mongo 数据解析',
         icon: '🍃',
