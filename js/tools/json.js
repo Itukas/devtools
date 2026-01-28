@@ -87,6 +87,38 @@ export function render() {
             /* 右侧源码视图背景 */
             #view-raw { background-color: #fcfcfc; }
 
+            /* --- 表格视图样式 --- */
+            .table-wrapper {
+                flex: 1; overflow: auto; background: #fff; display: none;
+            }
+            .json-table {
+                width: 100%; border-collapse: collapse; font-size: 13px; font-family: sans-serif; min-width: 600px;
+            }
+            .json-table th {
+                background: #f8fafc; position: sticky; top: 0; z-index: 10;
+                border: 1px solid #e2e8f0; padding: 0;
+            }
+            .th-content {
+                padding: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #475569;
+            }
+            .th-content:hover { background: #e2e8f0; }
+            .th-filter {
+                padding: 4px; border-top: 1px solid #e2e8f0; background: #fff;
+            }
+            .th-filter input {
+                width: 100%; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 11px; box-sizing: border-box;
+            }
+            .json-table td {
+                padding: 6px 8px; border: 1px solid #e2e8f0; color: #334155; max-width: 300px;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            .json-table tr:nth-child(even) { background: #f8fafc; }
+            .json-table tr:hover { background: #f1f5f9; }
+            .sort-icon { font-size: 10px; color: #94a3b8; margin-left: 4px; }
+            .sort-asc .sort-icon::after { content: '▲'; color: #2563eb; }
+            .sort-desc .sort-icon::after { content: '▼'; color: #2563eb; }
+            .table-empty { text-align: center; color: #94a3b8; padding: 40px; }
+
         </style>
 
         <div class="tool-box">
@@ -113,6 +145,7 @@ export function render() {
                         <div style="padding:0 10px; font-size:12px; font-weight:bold; color:#64748b;">结果</div>
                         <button class="view-tab active" data-view="tree">🌲 树形</button>
                         <button class="view-tab" data-view="raw">📝 源码</button>
+                        <button class="view-tab" data-view="table">📊 表格</button>
                         
                         <div class="tree-controls" id="tree-controls">
                             <button class="mini-btn" id="btn-expand">➕ 展开全部</button>
@@ -127,6 +160,13 @@ export function render() {
                     <div id="raw-wrapper" class="editor-wrapper" style="display:none;">
                         <div class="line-numbers" id="line-numbers-raw"></div>
                         <textarea id="view-raw" class="json-editor-area" readonly></textarea>
+                    </div>
+
+                    <div id="table-wrapper" class="table-wrapper">
+                        <table class="json-table" id="json-table">
+                            <thead id="table-head"></thead>
+                            <tbody id="table-body"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -147,6 +187,9 @@ export function init() {
     const viewRaw = document.getElementById('view-raw');
     const rawWrapper = document.getElementById('raw-wrapper');
     const lineNumbersRaw = document.getElementById('line-numbers-raw');
+    const tableWrapper = document.getElementById('table-wrapper');
+    const tableHead = document.getElementById('table-head');
+    const tableBody = document.getElementById('table-body');
 
     const status = document.getElementById('status-bar');
     const tabs = document.querySelectorAll('.view-tab');
@@ -186,6 +229,12 @@ export function init() {
         }
     };
 
+    // 表格相关状态
+    let tableData = [];
+    let tableColumns = [];
+    let sortConfig = { key: null, direction: 'asc' };
+    let filters = {};
+
     const switchView = (mode) => {
         currentMode = mode;
         tabs.forEach(t => t.classList.toggle('active', t.dataset.view === mode));
@@ -193,19 +242,29 @@ export function init() {
         if (mode === 'tree') {
             viewTree.style.display = 'block';
             rawWrapper.style.display = 'none';
+            tableWrapper.style.display = 'none';
             treeControls.style.display = 'flex';
-        } else {
+        } else if (mode === 'raw') {
             viewTree.style.display = 'none';
-            rawWrapper.style.display = 'flex'; // 显示带行号的容器
+            rawWrapper.style.display = 'flex';
+            tableWrapper.style.display = 'none';
             treeControls.style.display = 'none';
-            updateRawLineNumbers(); // 确保切换时行号更新
+            updateRawLineNumbers();
+        } else if (mode === 'table') {
+            viewTree.style.display = 'none';
+            rawWrapper.style.display = 'none';
+            tableWrapper.style.display = 'block';
+            treeControls.style.display = 'none';
+            renderTable();
         }
     };
 
     tabs.forEach(tab => {
         tab.onclick = () => {
             switchView(tab.dataset.view);
-            if (tab.dataset.view === 'tree') autoProcess();
+            if (tab.dataset.view === 'tree' || tab.dataset.view === 'table') {
+                autoProcess();
+            }
         };
     });
 
@@ -243,13 +302,112 @@ export function init() {
         return String(data);
     };
 
+    // 表格渲染函数
+    const renderTable = () => {
+        if (!tableData || tableData.length === 0) {
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '<tr><td colspan="100%" class="table-empty">暂无数据或数据不是数组格式</td></tr>';
+            return;
+        }
+
+        let displayData = tableData.filter(row => {
+            return Object.keys(filters).every(key => {
+                const filterVal = filters[key].toLowerCase();
+                if (!filterVal) return true;
+                const cellVal = String(row[key] === undefined || row[key] === null ? '' : row[key]).toLowerCase();
+                return cellVal.includes(filterVal);
+            });
+        });
+
+        if (sortConfig.key) {
+            displayData.sort((a, b) => {
+                const valA = a[sortConfig.key];
+                const valB = b[sortConfig.key];
+                if (valA === valB) return 0;
+                const comp = (valA > valB) ? 1 : -1;
+                return sortConfig.direction === 'asc' ? comp : -comp;
+            });
+        }
+
+        let theadHtml = '<tr>';
+        tableColumns.forEach(col => {
+            let sortClass = '';
+            if (sortConfig.key === col) {
+                sortClass = sortConfig.direction === 'asc' ? 'sort-asc' : 'sort-desc';
+            }
+            theadHtml += `
+                <th class="${sortClass}">
+                    <div class="th-content" data-key="${col}">
+                        <span>${col}</span>
+                        <span class="sort-icon"></span>
+                    </div>
+                    <div class="th-filter">
+                        <input type="text" placeholder="筛选..." data-filter-key="${col}" value="${filters[col] || ''}">
+                    </div>
+                </th>
+            `;
+        });
+        theadHtml += '</tr>';
+        tableHead.innerHTML = theadHtml;
+
+        tableHead.querySelectorAll('.th-content').forEach(el => {
+            el.onclick = () => {
+                const key = el.dataset.key;
+                if (sortConfig.key === key) {
+                    sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortConfig.key = key;
+                    sortConfig.direction = 'asc';
+                }
+                renderTable();
+            };
+        });
+
+        tableHead.querySelectorAll('input').forEach(input => {
+            input.oninput = (e) => {
+                const key = e.target.dataset.filterKey;
+                filters[key] = e.target.value.trim();
+                renderTableBody(displayData);
+            };
+            input.onclick = (e) => e.stopPropagation();
+        });
+
+        renderTableBody(displayData);
+    };
+
+    const renderTableBody = (data) => {
+        if (data.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="${tableColumns.length}" class="table-empty">无匹配结果</td></tr>`;
+            return;
+        }
+
+        const html = data.map(row => {
+            let tr = '<tr>';
+            tableColumns.forEach(col => {
+                let val = row[col];
+                if (typeof val === 'object' && val !== null) {
+                    val = JSON.stringify(val);
+                } else if (val === undefined || val === null) {
+                    val = '';
+                }
+                tr += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+            });
+            tr += '</tr>';
+            return tr;
+        }).join('');
+        tableBody.innerHTML = html;
+    };
+
     const autoProcess = () => {
         const val = input.value.trim();
         if (!val) {
             viewTree.innerHTML = '<div style="color:#cbd5e1; text-align:center; margin-top:40px; font-size:12px;">等待输入...</div>';
             viewRaw.value = '';
+            tableData = [];
+            tableColumns = [];
             updateRawLineNumbers();
             updateStatus("就绪");
+            if (currentMode === 'table') renderTable();
             return;
         }
         try {
@@ -260,9 +418,37 @@ export function init() {
             viewRaw.value = JSON.stringify(obj, null, 4);
             updateRawLineNumbers();
 
-            if (currentMode === 'tree') viewTree.innerHTML = buildTreeHtml(obj);
+            // 处理表格数据
+            if (Array.isArray(obj) && obj.length > 0) {
+                tableData = obj;
+                const keys = new Set();
+                obj.forEach(item => {
+                    if (item && typeof item === 'object') {
+                        Object.keys(item).forEach(k => keys.add(k));
+                    }
+                });
+                tableColumns = Array.from(keys);
+            } else if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+                // 单个对象也转换为表格
+                tableData = [obj];
+                tableColumns = Object.keys(obj);
+            } else {
+                tableData = [];
+                tableColumns = [];
+            }
+
+            if (currentMode === 'tree') {
+                viewTree.innerHTML = buildTreeHtml(obj);
+            } else if (currentMode === 'table') {
+                renderTable();
+            }
         } catch (e) {
-            if (currentMode === 'tree') viewTree.innerHTML = `<div style="color:#dc2626; padding:10px;">🚫 解析错误:<br>${e.message}</div>`;
+            if (currentMode === 'tree') {
+                viewTree.innerHTML = `<div style="color:#dc2626; padding:10px;">🚫 解析错误:<br>${e.message}</div>`;
+            } else if (currentMode === 'table') {
+                tableHead.innerHTML = '';
+                tableBody.innerHTML = `<tr><td colspan="100%" class="table-empty" style="color:#dc2626;">解析错误: ${e.message}</td></tr>`;
+            }
             updateStatus(`❌ 语法错误`, true);
         }
     };
