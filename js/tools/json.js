@@ -52,7 +52,8 @@ export function render() {
             .resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: -4px; right: -4px; z-index: 10; }
             .resizer:hover, .resizer.dragging { background-color: #2563eb; width: 2px; }
 
-            .panel-left { flex: 0 0 40%; display: flex; flex-direction: column; min-width: 150px; background: #fff; }
+            .panel-left { flex: 0 0 40%; display: flex; flex-direction: column; min-width: 150px; background: #fff; overflow: hidden; }
+            .panel-left textarea { overflow-y: auto; overflow-x: auto; }
             .panel-right { flex: 1; display: flex; flex-direction: column; min-width: 150px; background: #fff; overflow: hidden; }
             .panel-header { padding: 5px 10px; font-size: 12px; font-weight: bold; color: #64748b; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
 

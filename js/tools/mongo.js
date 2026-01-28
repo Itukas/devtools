@@ -9,6 +9,7 @@ export function render() {
                 flex: 1; display: flex; flex-direction: column;
                 border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; overflow: hidden;
             }
+            .editor-box:first-child textarea { overflow-y: auto; }
             .box-header {
                 padding: 8px 15px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
                 font-weight: 600; font-size: 13px; color: #475569;
@@ -62,6 +63,7 @@ export function render() {
             .raw-input {
                 flex: 1; padding: 15px; border: none; resize: none; outline: none; white-space: pre;
                 font-family: 'Menlo', 'Monaco', monospace; font-size: 13px; line-height: 1.6;
+                overflow-y: auto; overflow-x: auto;
             }
 
             /* 高亮样式 */

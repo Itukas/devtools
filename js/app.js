@@ -1,7 +1,6 @@
 import toolsConfig from './config.js';
 
 const navList = document.getElementById('nav-list');
-const toolTitle = document.getElementById('tool-title');
 const toolContainer = document.getElementById('tool-container');
 const sidebar = document.querySelector('.sidebar');
 const sidebarToggle = document.getElementById('sidebar-toggle');
@@ -58,7 +57,6 @@ async function loadTool(tool, navItem) {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     if(navItem) navItem.classList.add('active');
 
-    toolTitle.textContent = tool.name;
     toolContainer.innerHTML = '<div class="loading" style="text-align:center; margin-top:50px; color:#6b7280;">加载中...</div>';
 
     try {

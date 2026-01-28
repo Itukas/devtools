@@ -65,7 +65,8 @@ export function render() {
             /* 结果框 */
             .result-box {
                 flex: 1; /* 占据剩余高度 */
-                background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px;
+                background: #f8fafc; color: #334155; padding: 15px; border-radius: 8px;
+                border: 1px solid #e2e8f0;
                 font-family: 'Menlo', 'Monaco', monospace; font-size: 13px; line-height: 1.6;
                 white-space: pre-wrap; word-break: break-all; overflow-y: auto;
                 position: relative; min-height: 100px;
@@ -76,10 +77,10 @@ export function render() {
                 position: absolute; top: 10px; right: 10px; display: flex; gap: 8px;
             }
             .action-btn {
-                padding: 4px 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-                color: #fff; border-radius: 4px; font-size: 12px; cursor: pointer; transition: background 0.2s;
+                padding: 4px 10px; background: #fff; border: 1px solid #cbd5e1;
+                color: #334155; border-radius: 4px; font-size: 12px; cursor: pointer; transition: background 0.2s;
             }
-            .action-btn:hover { background: rgba(255,255,255,0.2); }
+            .action-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
         </style>
 
         <div class="tool-box builder-container">
