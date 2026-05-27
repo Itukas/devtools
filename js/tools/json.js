@@ -18,7 +18,32 @@ export function render() {
             .mini-btn:hover { background: #f1f5f9; border-color: #94a3b8; color: #0f172a; }
 
             /* --- JSON 树形视图 --- */
-            .json-tree-container { flex: 1; overflow: auto; padding: 10px; background-color: #fff; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: nowrap; }
+            .json-tree-container { flex: 1; overflow: auto; padding: 10px; background-color: #fff; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: nowrap; min-height: 0; }
+            .json-tree-container > .j-root { display: inline-block; min-width: 100%; }
+
+            /* --- 统一滚动条美化（WebKit）--- */
+            .json-tree-container::-webkit-scrollbar,
+            .table-wrapper::-webkit-scrollbar,
+            textarea.json-editor-area::-webkit-scrollbar,
+            .editor-wrapper textarea::-webkit-scrollbar { width: 12px; height: 12px; }
+            .json-tree-container::-webkit-scrollbar-track,
+            .table-wrapper::-webkit-scrollbar-track,
+            textarea.json-editor-area::-webkit-scrollbar-track,
+            .editor-wrapper textarea::-webkit-scrollbar-track { background: #f8fafc; }
+            .json-tree-container::-webkit-scrollbar-thumb,
+            .table-wrapper::-webkit-scrollbar-thumb,
+            textarea.json-editor-area::-webkit-scrollbar-thumb,
+            .editor-wrapper textarea::-webkit-scrollbar-thumb {
+                background: #cbd5e1; border-radius: 6px; border: 2px solid #f8fafc;
+            }
+            .json-tree-container::-webkit-scrollbar-thumb:hover,
+            .table-wrapper::-webkit-scrollbar-thumb:hover,
+            textarea.json-editor-area::-webkit-scrollbar-thumb:hover,
+            .editor-wrapper textarea::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            .json-tree-container::-webkit-scrollbar-corner,
+            .table-wrapper::-webkit-scrollbar-corner { background: #f8fafc; }
+            /* Firefox */
+            .json-tree-container, .table-wrapper, textarea.json-editor-area { scrollbar-width: thin; scrollbar-color: #cbd5e1 #f8fafc; }
             
             details > summary { list-style: none; cursor: pointer; outline: none; display: inline-block; }
             details > summary::-webkit-details-marker { display: none; }
@@ -119,6 +144,32 @@ export function render() {
             .sort-desc .sort-icon::after { content: '▼'; color: #2563eb; }
             .table-empty { text-align: center; color: #94a3b8; padding: 40px; }
 
+            /* --- 树形节点行（用于右键定位）--- */
+            .json-tree-container .j-row { display: block; }
+            .json-tree-container .j-row.ctx-active > .j-key,
+            .json-tree-container .j-row.ctx-active { background: #fef3c7; border-radius: 3px; }
+
+            /* --- 自定义右键菜单 --- */
+            .ctx-menu {
+                position: fixed; z-index: 9999; background: #fff;
+                border: 1px solid #e2e8f0; border-radius: 6px;
+                box-shadow: 0 6px 24px rgba(15, 23, 42, 0.15);
+                padding: 4px 0; font-size: 13px; min-width: 200px; max-width: 320px;
+                user-select: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            }
+            .ctx-menu-path {
+                padding: 6px 12px; font-size: 11px; color: #64748b;
+                background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+                font-family: 'Menlo', 'Monaco', monospace;
+                word-break: break-all; line-height: 1.4;
+            }
+            .ctx-menu-item {
+                padding: 7px 14px; cursor: pointer; color: #334155;
+                display: flex; align-items: center; gap: 8px; white-space: nowrap;
+            }
+            .ctx-menu-item:hover { background: #eff6ff; color: #2563eb; }
+            .ctx-menu-item .ctx-shortcut { margin-left: auto; color: #94a3b8; font-size: 11px; }
+            .ctx-menu-sep { height: 1px; background: #e2e8f0; margin: 4px 0; }
         </style>
 
         <div class="tool-box">
@@ -150,6 +201,11 @@ export function render() {
                         <div class="tree-controls" id="tree-controls">
                             <button class="mini-btn" id="btn-expand">➕ 展开全部</button>
                             <button class="mini-btn" id="btn-collapse">➖ 折叠全部</button>
+                        </div>
+                        <div class="tree-controls" id="table-controls" style="display:none;">
+                            <button class="mini-btn" id="btn-export-csv">📥 导出 CSV</button>
+                            <button class="mini-btn" id="btn-export-json">📥 导出 JSON</button>
+                            <button class="mini-btn" id="btn-reset-table" title="清除筛选与排序">♻️ 重置</button>
                         </div>
                     </div>
                     
@@ -194,6 +250,10 @@ export function init() {
     const status = document.getElementById('status-bar');
     const tabs = document.querySelectorAll('.view-tab');
     const treeControls = document.getElementById('tree-controls');
+    const tableControls = document.getElementById('table-controls');
+
+    // 当前 JSON 数据（用于右键菜单根据 path 取值）
+    let currentJson = null;
 
     // --- 1. 行号逻辑 (仅 Output) ---
     const updateRawLineNumbers = () => {
@@ -244,23 +304,27 @@ export function init() {
             rawWrapper.style.display = 'none';
             tableWrapper.style.display = 'none';
             treeControls.style.display = 'flex';
+            tableControls.style.display = 'none';
         } else if (mode === 'raw') {
             viewTree.style.display = 'none';
             rawWrapper.style.display = 'flex';
             tableWrapper.style.display = 'none';
             treeControls.style.display = 'none';
+            tableControls.style.display = 'none';
             updateRawLineNumbers();
         } else if (mode === 'table') {
             viewTree.style.display = 'none';
             rawWrapper.style.display = 'none';
             tableWrapper.style.display = 'block';
             treeControls.style.display = 'none';
+            tableControls.style.display = 'flex';
             renderTable();
         }
     };
 
     tabs.forEach(tab => {
         tab.onclick = () => {
+            hideCtxMenu();
             switchView(tab.dataset.view);
             if (tab.dataset.view === 'tree' || tab.dataset.view === 'table') {
                 autoProcess();
@@ -273,7 +337,7 @@ export function init() {
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     };
 
-    const buildTreeHtml = (data) => {
+    const buildTreeHtml = (data, pathArr = []) => {
         if (data === null) return `<span class="j-null">null</span>`;
         if (typeof data === 'boolean') return `<span class="j-bool">${data}</span>`;
         if (typeof data === 'number') return `<span class="j-num">${data}</span>`;
@@ -283,7 +347,9 @@ export function init() {
             if (data.length === 0) return `<span class="j-syntax">[]</span>`;
             let html = `<details open><summary><span class="j-syntax">[</span><span class="j-meta">Array(${data.length})</span></summary><div>`;
             data.forEach((item, index) => {
-                html += `<div>${buildTreeHtml(item)}${index < data.length - 1 ? '<span class="j-syntax">,</span>' : ''}</div>`;
+                const childPath = pathArr.concat(index);
+                const pathAttr = escapeHtml(JSON.stringify(childPath));
+                html += `<div class="j-row" data-path="${pathAttr}">${buildTreeHtml(item, childPath)}${index < data.length - 1 ? '<span class="j-syntax">,</span>' : ''}</div>`;
             });
             html += `</div><span class="j-syntax">]</span></details>`;
             return html;
@@ -294,12 +360,85 @@ export function init() {
             if (keys.length === 0) return `<span class="j-syntax">{}</span>`;
             let html = `<details open><summary><span class="j-syntax">{</span><span class="j-meta">Object{${keys.length}}</span></summary><div>`;
             keys.forEach((key, index) => {
-                html += `<div><span class="j-key">"${escapeHtml(key)}"</span><span class="j-syntax">: </span>${buildTreeHtml(data[key])}${index < keys.length - 1 ? '<span class="j-syntax">,</span>' : ''}</div>`;
+                const childPath = pathArr.concat(key);
+                const pathAttr = escapeHtml(JSON.stringify(childPath));
+                html += `<div class="j-row" data-path="${pathAttr}"><span class="j-key">"${escapeHtml(key)}"</span><span class="j-syntax">: </span>${buildTreeHtml(data[key], childPath)}${index < keys.length - 1 ? '<span class="j-syntax">,</span>' : ''}</div>`;
             });
             html += `</div><span class="j-syntax">}</span></details>`;
             return html;
         }
         return String(data);
+    };
+
+    // ---- 表格筛选/排序后的数据（导出时复用）----
+    const getFilteredSortedTable = () => {
+        let data = tableData.filter(row => {
+            return Object.keys(filters).every(key => {
+                const filterVal = (filters[key] || '').toLowerCase();
+                if (!filterVal) return true;
+                const cellVal = String(row[key] === undefined || row[key] === null ? '' : row[key]).toLowerCase();
+                return cellVal.includes(filterVal);
+            });
+        });
+        if (sortConfig.key) {
+            data = [...data].sort((a, b) => {
+                const valA = a[sortConfig.key];
+                const valB = b[sortConfig.key];
+                if (valA === valB) return 0;
+                if (valA === undefined || valA === null) return 1;
+                if (valB === undefined || valB === null) return -1;
+                const comp = (valA > valB) ? 1 : -1;
+                return sortConfig.direction === 'asc' ? comp : -comp;
+            });
+        }
+        return data;
+    };
+
+    const downloadBlob = (blob, filename) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    const escapeCsvCell = (val) => {
+        if (val === null || val === undefined) return '';
+        let s = (typeof val === 'object') ? JSON.stringify(val) : String(val);
+        if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+        return s;
+    };
+
+    const exportTableAsCsv = () => {
+        if (!tableData.length || !tableColumns.length) {
+            updateStatus('没有可导出的表格数据', true);
+            return;
+        }
+        const data = getFilteredSortedTable();
+        const lines = [tableColumns.map(escapeCsvCell).join(',')];
+        data.forEach(row => {
+            lines.push(tableColumns.map(col => escapeCsvCell(row[col])).join(','));
+        });
+        const csv = lines.join('\r\n');
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        downloadBlob(blob, `json-table-${ts}.csv`);
+        updateStatus(`已导出 CSV (${data.length} 行) ✅`);
+    };
+
+    const exportTableAsJson = () => {
+        if (!tableData.length) {
+            updateStatus('没有可导出的表格数据', true);
+            return;
+        }
+        const data = getFilteredSortedTable();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8;' });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        downloadBlob(blob, `json-table-${ts}.json`);
+        updateStatus(`已导出 JSON (${data.length} 条) ✅`);
     };
 
     // 表格渲染函数
@@ -310,24 +449,7 @@ export function init() {
             return;
         }
 
-        let displayData = tableData.filter(row => {
-            return Object.keys(filters).every(key => {
-                const filterVal = filters[key].toLowerCase();
-                if (!filterVal) return true;
-                const cellVal = String(row[key] === undefined || row[key] === null ? '' : row[key]).toLowerCase();
-                return cellVal.includes(filterVal);
-            });
-        });
-
-        if (sortConfig.key) {
-            displayData.sort((a, b) => {
-                const valA = a[sortConfig.key];
-                const valB = b[sortConfig.key];
-                if (valA === valB) return 0;
-                const comp = (valA > valB) ? 1 : -1;
-                return sortConfig.direction === 'asc' ? comp : -comp;
-            });
-        }
+        const displayData = getFilteredSortedTable();
 
         let theadHtml = '<tr>';
         tableColumns.forEach(col => {
@@ -405,6 +527,7 @@ export function init() {
             viewRaw.value = '';
             tableData = [];
             tableColumns = [];
+            currentJson = null;
             updateRawLineNumbers();
             updateStatus("就绪");
             if (currentMode === 'table') renderTable();
@@ -412,6 +535,7 @@ export function init() {
         }
         try {
             const obj = JSON.parse(val);
+            currentJson = obj;
             updateStatus("JSON 有效 ✅");
 
             // 实时更新右侧 Raw 视图
@@ -438,7 +562,7 @@ export function init() {
             }
 
             if (currentMode === 'tree') {
-                viewTree.innerHTML = buildTreeHtml(obj);
+                viewTree.innerHTML = `<div class="j-row j-root" data-path="[]">${buildTreeHtml(obj, [])}</div>`;
             } else if (currentMode === 'table') {
                 renderTable();
             }
@@ -465,6 +589,15 @@ export function init() {
 
     document.getElementById('btn-collapse').onclick = () => {
         viewTree.querySelectorAll('details').forEach(el => el.open = false);
+    };
+
+    document.getElementById('btn-export-csv').onclick = exportTableAsCsv;
+    document.getElementById('btn-export-json').onclick = exportTableAsJson;
+    document.getElementById('btn-reset-table').onclick = () => {
+        filters = {};
+        sortConfig = { key: null, direction: 'asc' };
+        renderTable();
+        updateStatus('已重置筛选与排序');
     };
 
     document.getElementById('btn-fmt').onclick = () => {
@@ -522,6 +655,162 @@ export function init() {
         autoProcess();
         updateStatus("已清空");
     };
+
+    // --- 5. 树形节点右键菜单 ---
+    let ctxMenuEl = null;
+    let ctxActiveRow = null;
+
+    const hideCtxMenu = () => {
+        if (ctxMenuEl) {
+            ctxMenuEl.remove();
+            ctxMenuEl = null;
+        }
+        if (ctxActiveRow) {
+            ctxActiveRow.classList.remove('ctx-active');
+            ctxActiveRow = null;
+        }
+    };
+
+    const pathToString = (pathArr) => {
+        let s = '$';
+        for (const p of pathArr) {
+            if (typeof p === 'number') {
+                s += `[${p}]`;
+            } else if (/^[a-zA-Z_$][\w$]*$/.test(p)) {
+                s += `.${p}`;
+            } else {
+                s += `[${JSON.stringify(p)}]`;
+            }
+        }
+        return s;
+    };
+
+    const getValueByPath = (obj, pathArr) => {
+        let cur = obj;
+        for (const p of pathArr) {
+            if (cur == null) return undefined;
+            cur = cur[p];
+        }
+        return cur;
+    };
+
+    const valueToText = (v, pretty = false) => {
+        if (v === undefined) return '';
+        if (v === null) return 'null';
+        if (typeof v === 'string') return v;
+        if (typeof v === 'object') return JSON.stringify(v, null, pretty ? 4 : 0);
+        return String(v);
+    };
+
+    const copyToClipboard = (text, label) => {
+        if (text === '' || text === undefined || text === null) {
+            updateStatus(`${label}：内容为空`, true);
+            return;
+        }
+        navigator.clipboard.writeText(String(text))
+            .then(() => updateStatus(`已复制 ${label} ✅`))
+            .catch(() => updateStatus(`${label} 复制失败`, true));
+    };
+
+    const showCtxMenu = (x, y, row) => {
+        hideCtxMenu();
+        let pathArr;
+        try { pathArr = JSON.parse(row.dataset.path || '[]'); }
+        catch { pathArr = []; }
+
+        const key = pathArr.length > 0 ? pathArr[pathArr.length - 1] : null;
+        const value = getValueByPath(currentJson, pathArr);
+        const pathStr = pathToString(pathArr);
+        const isObj = (value !== null && typeof value === 'object');
+
+        const menu = document.createElement('div');
+        menu.className = 'ctx-menu';
+
+        const items = [];
+        if (isObj) {
+            items.push({ act: 'copy-value-pretty', label: '🌲 复制 Value（格式化）' });
+            items.push({ act: 'copy-value', label: '📋 复制 Value（压缩）' });
+        } else {
+            items.push({ act: 'copy-value', label: '📋 复制 Value' });
+            if (typeof value === 'string') {
+                items.push({ act: 'copy-value-quoted', label: '💬 复制 Value（带引号）' });
+            }
+        }
+        if (key !== null && key !== undefined) {
+            items.push({ act: 'sep' });
+            items.push({ act: 'copy-key', label: `🔑 复制 Key（${String(key)}）` });
+        }
+        items.push({ act: 'copy-path', label: '🛣️ 复制 Path' });
+        items.push({ act: 'sep' });
+        items.push({ act: 'copy-entry', label: '📑 复制 "key": value' });
+
+        let html = `<div class="ctx-menu-path" title="${escapeHtml(pathStr)}">${escapeHtml(pathStr)}</div>`;
+        items.forEach(it => {
+            if (it.act === 'sep') html += `<div class="ctx-menu-sep"></div>`;
+            else html += `<div class="ctx-menu-item" data-act="${it.act}">${it.label}</div>`;
+        });
+        menu.innerHTML = html;
+
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.ctx-menu-item');
+            if (!item) return;
+            const act = item.dataset.act;
+            if (act === 'copy-value') {
+                copyToClipboard(valueToText(value, false), 'Value');
+            } else if (act === 'copy-value-pretty') {
+                copyToClipboard(valueToText(value, true), 'Value (格式化)');
+            } else if (act === 'copy-value-quoted') {
+                copyToClipboard(JSON.stringify(value), 'Value (带引号)');
+            } else if (act === 'copy-key') {
+                copyToClipboard(String(key), 'Key');
+            } else if (act === 'copy-path') {
+                copyToClipboard(pathStr, 'Path');
+            } else if (act === 'copy-entry') {
+                const keyText = key === null || key === undefined ? '(root)' : JSON.stringify(key);
+                const valText = isObj ? JSON.stringify(value, null, 2) : JSON.stringify(value);
+                copyToClipboard(`${keyText}: ${valText}`, '键值对');
+            }
+            hideCtxMenu();
+        });
+
+        document.body.appendChild(menu);
+
+        const rect = menu.getBoundingClientRect();
+        const vw = window.innerWidth, vh = window.innerHeight;
+        let nx = x, ny = y;
+        if (nx + rect.width > vw - 8) nx = vw - rect.width - 8;
+        if (ny + rect.height > vh - 8) ny = vh - rect.height - 8;
+        if (nx < 8) nx = 8;
+        if (ny < 8) ny = 8;
+        menu.style.left = nx + 'px';
+        menu.style.top = ny + 'px';
+
+        ctxMenuEl = menu;
+        ctxActiveRow = row;
+        row.classList.add('ctx-active');
+    };
+
+    viewTree.addEventListener('contextmenu', (e) => {
+        const row = e.target.closest('.j-row');
+        if (!row) return;
+        if (currentJson === undefined) return;
+        if (currentJson === null && row.dataset.path !== '[]') return;
+        e.preventDefault();
+        e.stopPropagation();
+        showCtxMenu(e.clientX, e.clientY, row);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (ctxMenuEl && !e.target.closest('.ctx-menu')) hideCtxMenu();
+    });
+    document.addEventListener('contextmenu', (e) => {
+        if (ctxMenuEl && !e.target.closest('.json-tree-container')) hideCtxMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideCtxMenu();
+    });
+    window.addEventListener('blur', hideCtxMenu);
+    window.addEventListener('resize', hideCtxMenu);
 
     // 拖拽逻辑
     const resizer = document.getElementById('dragMe');
