@@ -72,6 +72,12 @@ export default [
         file: 'video_gif.js'
     },
     {
+        id: 'video-frames',
+        name: '视频抽帧',
+        icon: '🎞️',
+        file: 'video_frames.js'
+    },
+    {
         id: 'image-stitch',
         name: '多图拼接',
         icon: '🎞️',
