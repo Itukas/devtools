@@ -28,10 +28,24 @@ export function render() {
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                min-height: 200px;
+                height: 300px;
+                min-height: 150px;
                 position: relative;
             }
-            video { max-width: 100%; max-height: 400px; display: block; }
+            video { max-width: 100%; max-height: 100%; display: block; }
+
+            /* 视频尺寸拖动手柄 */
+            .resize-handle {
+                position: absolute; bottom: 0; left: 0; width: 100%; height: 16px;
+                cursor: ns-resize; background: rgba(255,255,255,0.08);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 20; transition: background 0.2s;
+            }
+            .resize-handle:hover { background: rgba(59,130,246,0.45); }
+            .resize-handle::before {
+                content: ''; width: 44px; height: 4px;
+                background: rgba(255,255,255,0.6); border-radius: 2px;
+            }
 
             /* --- 核心：时间轴滑块样式 --- */
             .timeline-container {
@@ -86,6 +100,7 @@ export function render() {
             .btn-green { background: #16a34a; }
             .btn-orange { background: #f97316; }
             .btn-disabled { background: #94a3b8; cursor: not-allowed; }
+            .btn-lg { padding: 12px 28px; font-size: 15px; box-shadow: 0 2px 6px rgba(22,163,74,0.3); }
 
             .progress-container {
                 height: 20px; background: #e2e8f0; border-radius: 10px; overflow: hidden; position: relative; margin-top: 15px; display: none;
@@ -110,8 +125,9 @@ export function render() {
             </div>
 
             <div id="editor-panel" style="display:none; flex-direction:column; gap:15px;">
-                <div class="video-wrapper">
+                <div class="video-wrapper" id="video-wrapper">
                     <video id="video-player" controls playsinline></video>
+                    <div class="resize-handle" id="resize-handle" title="按住上下拖动，调整视频显示大小"></div>
                 </div>
 
                 <div class="controls-card">
@@ -165,14 +181,14 @@ export function render() {
             </div>
 
             <div id="result-area" class="result-area">
-                <div style="margin-bottom:10px; font-weight:bold; color:#334155;">转换完成!</div>
-                <img id="gif-result" class="gif-preview">
-                <div style="margin-top:15px; display:flex; justify-content:center; gap:10px; align-items:center;">
+                <div style="display:flex; justify-content:center; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:15px;">
+                    <span style="font-weight:bold; color:#16a34a;">✅ 转换完成!</span>
                     <span id="gif-size" style="font-size:12px; color:#64748b; background:#f1f5f9; padding:4px 8px; border-radius:4px;"></span>
                     <a id="btn-download" download="video.gif" style="text-decoration:none;">
-                        <button class="btn btn-green">⬇️ 下载 GIF</button>
+                        <button class="btn btn-green btn-lg">⬇️ 下载 GIF</button>
                     </a>
                 </div>
+                <img id="gif-result" class="gif-preview">
             </div>
         </div>
     `;
@@ -213,6 +229,8 @@ export function init() {
     const editorPanel = document.getElementById('editor-panel');
     const video = document.getElementById('video-player');
     const resultArea = document.getElementById('result-area');
+    const videoWrapper = document.getElementById('video-wrapper');
+    const resizeHandle = document.getElementById('resize-handle');
 
     // Timeline Elements
     const trackArea = document.getElementById('timeline-track-area');
@@ -309,6 +327,36 @@ export function init() {
 
     initDraggable(thumbS, true);
     initDraggable(thumbE, false);
+
+    // --- 视频显示区域大小拖动 ---
+    (() => {
+        let resizing = false, startY = 0, startH = 0;
+
+        const onResize = (e) => {
+            if (!resizing) return;
+            let h = startH + (e.clientY - startY);
+            if (h < 150) h = 150;
+            if (h > 800) h = 800;
+            videoWrapper.style.height = `${h}px`;
+        };
+
+        const stopResize = () => {
+            resizing = false;
+            document.body.style.cursor = '';
+            document.removeEventListener('mousemove', onResize);
+            document.removeEventListener('mouseup', stopResize);
+        };
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            resizing = true;
+            startY = e.clientY;
+            startH = videoWrapper.offsetHeight;
+            document.body.style.cursor = 'ns-resize';
+            document.addEventListener('mousemove', onResize);
+            document.addEventListener('mouseup', stopResize);
+        });
+    })();
 
     // --- 视频播放事件同步 ---
     video.addEventListener('timeupdate', () => {
@@ -450,6 +498,7 @@ export function init() {
                 const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
                 gifSize.textContent = `大小: ${sizeMB} MB`;
                 resultArea.style.display = 'block';
+                resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
             });
 
             gif.render();
