@@ -146,8 +146,8 @@ export function init() {
     const cleanMsg = document.getElementById('clean-msg');
 
     // 固定前缀
-    const PREFIX = "https://biliplayer.91vrchat.com/player/?url=";
-
+    // const PREFIX = "https://biliplayer.91vrchat.com/player/?url=";
+    const PREFIX = "https://api.xuan25.com/bili-resolve/ 在后面输入B站链接或BV号 ⇨          ";
     // 核心处理逻辑
     const processUrl = (rawText) => {
         if (!rawText) {
