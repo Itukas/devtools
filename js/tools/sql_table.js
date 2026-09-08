@@ -303,12 +303,8 @@ export function init() {
         const tableName = tableNameInput.value.trim() || 'my_table';
         const cols = parsedData.headers.map(h => `\`${h}\``).join(', '); // 加反引号防关键字
 
-        // 生成批量 Insert 语句
-        // 格式: INSERT INTO `table` (`col1`, `col2`) VALUES (val1, val2), (val3, val4);
-
-        let sql = `INSERT INTO \`${tableName}\` (${cols}) VALUES\n`;
-
-        const valueRows = parsedData.rows.map(row => {
+        // 生成逐条 Insert 语句，每条记录一条
+        const sql = parsedData.rows.map(row => {
             const values = row.map(cell => {
                 // 处理 NULL
                 if (cell === 'NULL' || cell === undefined) return 'NULL';
@@ -327,10 +323,8 @@ export function init() {
                     return `'${cell.replace(/'/g, "\\'")}'`;
                 }
             });
-            return `(${values.join(', ')})`;
-        });
-
-        sql += valueRows.join(',\n') + ';';
+            return `INSERT INTO \`${tableName}\` (${cols}) VALUES (${values.join(', ')});`;
+        }).join('\n');
 
         copyToClipboard(sql, btnInsert);
     };
