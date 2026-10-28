@@ -1,7 +1,23 @@
+export function normalizeCrop(crop, videoWidth, videoHeight) {
+    const integer = (value, fallback) => Number.isFinite(Number(value)) ? Math.round(Number(value)) : fallback;
+    const width = Math.max(1, Math.min(videoWidth, integer(crop.width, videoWidth)));
+    const height = Math.max(1, Math.min(videoHeight, integer(crop.height, videoHeight)));
+    return { width, height,
+        x: Math.max(0, Math.min(videoWidth - width, integer(crop.x, 0))),
+        y: Math.max(0, Math.min(videoHeight - height, integer(crop.y, 0))) };
+}
+
 export function render() {
     return `
         <style>
-            .vg-container { display: flex; flex-direction: column; gap: 20px; user-select: none; }
+            .vg-container { display: flex; flex-direction: column; gap: 20px; user-select: none; overflow:auto; padding:20px; }
+            .vg-container > * { flex-shrink:0; }
+            .vg-crop-layer { position:absolute; pointer-events:none; overflow:hidden; }
+            .vg-crop-box { position:absolute; box-sizing:border-box; border:2px solid #38bdf8; box-shadow:0 0 0 10000px #0008; cursor:move; pointer-events:auto; touch-action:none; }
+            .vg-crop-box:focus { outline:2px solid white; outline-offset:-5px; }
+            .vg-crop-box span { position:absolute; top:4px; left:4px; background:#0f172acc; color:white; padding:3px 6px; font-size:12px; white-space:nowrap; }
+            .vg-crop-settings { border-top:1px solid #e2e8f0; padding-top:15px; }
+            .vg-crop-settings [hidden] { display:none; }
             
             /* 上传区 */
             .upload-zone {
@@ -32,7 +48,7 @@ export function render() {
                 min-height: 150px;
                 position: relative;
             }
-            video { max-width: 100%; max-height: 100%; display: block; }
+            .vg-container video { max-width: 100%; max-height: 100%; display: block; }
 
             /* 视频尺寸拖动手柄 */
             .resize-handle {
@@ -127,6 +143,9 @@ export function render() {
             <div id="editor-panel" style="display:none; flex-direction:column; gap:15px;">
                 <div class="video-wrapper" id="video-wrapper">
                     <video id="video-player" controls playsinline></video>
+                    <div class="vg-crop-layer" id="vg-crop-layer" hidden>
+                        <div class="vg-crop-box" id="vg-crop-box" tabindex="0" role="group" aria-label="视频裁剪区域，可拖动或按方向键移动"><span id="vg-crop-label"></span></div>
+                    </div>
                     <div class="resize-handle" id="resize-handle" title="按住上下拖动，调整视频显示大小"></div>
                 </div>
 
@@ -161,11 +180,31 @@ export function render() {
                         <button id="btn-play-range" class="btn btn-orange">▶️ 预览选中片段</button>
                     </div>
 
+                    <div class="vg-crop-settings">
+                        <div class="row">
+                            <label><input type="checkbox" id="vg-crop-enabled"> 只转换选定区域</label>
+                            <span id="vg-source-size" style="font-size:12px;color:#64748b;"></span>
+                        </div>
+                        <div id="vg-crop-options" hidden>
+                            <div class="row">
+                                <label class="input-group">裁剪宽(px) <input id="vg-crop-width" type="number" class="input-sm" min="1" step="1"></label>
+                                <label class="input-group">裁剪高(px) <input id="vg-crop-height" type="number" class="input-sm" min="1" step="1"></label>
+                                <label class="input-group">X <input id="vg-crop-x" type="number" class="input-sm" min="0" step="1"></label>
+                                <label class="input-group">Y <input id="vg-crop-y" type="number" class="input-sm" min="0" step="1"></label>
+                            </div>
+                            <div class="row">
+                                <label class="input-group">预设 <select id="vg-crop-preset"><option value="custom">自定义</option><option value="1:1">正方形 1:1</option><option value="16:9">横屏 16:9</option><option value="9:16">竖屏 9:16</option><option value="full">完整画面</option></select></label>
+                                <button id="vg-crop-center" class="btn btn-blue" type="button">居中选区</button>
+                            </div>
+                            <p style="font-size:12px;color:#64748b;line-height:1.8;">尺寸和坐标使用原视频像素。拖动蓝框调整位置，或用方向键微调（Shift 加速）。选区尺寸保持固定，整个片段只截取这一部分。</p>
+                        </div>
+                        <div id="vg-output-size" style="font-size:13px;color:#475569;margin-bottom:12px;"></div>
+                    </div>
                     <div class="row" style="border-top:1px solid #f1f5f9; padding-top:15px; margin-top:5px;">
                         <span class="label-bold">⚙️ 参数:</span>
                         <div class="input-group">
-                            <label>宽度</label>
-                            <input type="number" id="in-width" class="input-sm" value="320" step="10">
+                            <label>GIF 宽度</label>
+                            <input type="number" id="in-width" class="input-sm" value="320" min="16" max="1920" step="1">
                         </div>
                         <div class="input-group">
                             <label>帧率</label>
@@ -212,7 +251,7 @@ export function init() {
     // 加载库
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js')
         .then(() => fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'))
-        .then(r => r.text())
+        .then(r => { if (!r.ok) throw new Error('GIF worker 加载失败'); return r.text(); })
         .then(workerScript => {
             const blob = new Blob([workerScript], { type: 'application/javascript' });
             window.gifWorkerUrl = URL.createObjectURL(blob);
@@ -257,6 +296,87 @@ export function init() {
 
     let previewInterval = null;
     let videoDuration = 0;
+    let busy = false, sourceUrl = null, resultUrl = null;
+    let activeGif = null;
+    const cropEnabled = document.getElementById('vg-crop-enabled');
+    const cropOptions = document.getElementById('vg-crop-options');
+    const cropLayer = document.getElementById('vg-crop-layer');
+    const cropBox = document.getElementById('vg-crop-box');
+    const cropLabel = document.getElementById('vg-crop-label');
+    const cropPreset = document.getElementById('vg-crop-preset');
+    const cropInputs = Object.fromEntries(['width', 'height', 'x', 'y'].map(key => [key, document.getElementById(`vg-crop-${key}`)]));
+    let crop = { x: 0, y: 0, width: 1, height: 1 };
+    const sourceRegion = () => cropEnabled.checked ? { ...crop } : { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight };
+    const updateCrop = () => {
+        if (!video.videoWidth) return;
+        crop = normalizeCrop(crop, video.videoWidth, video.videoHeight);
+        for (const [key, input] of Object.entries(cropInputs)) input.value = crop[key];
+        cropInputs.width.max = video.videoWidth; cropInputs.height.max = video.videoHeight;
+        cropInputs.x.max = video.videoWidth - crop.width; cropInputs.y.max = video.videoHeight - crop.height;
+        cropOptions.hidden = cropLayer.hidden = !cropEnabled.checked;
+        const bounds = video.getBoundingClientRect(), wrapper = videoWrapper.getBoundingClientRect();
+        Object.assign(cropLayer.style, { left: `${bounds.left - wrapper.left}px`, top: `${bounds.top - wrapper.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` });
+        Object.assign(cropBox.style, { left: `${crop.x / video.videoWidth * 100}%`, top: `${crop.y / video.videoHeight * 100}%`, width: `${crop.width / video.videoWidth * 100}%`, height: `${crop.height / video.videoHeight * 100}%` });
+        cropLabel.textContent = `${crop.width} × ${crop.height}`;
+        const region = sourceRegion();
+        const outputWidth = parseInt(inWidth.value);
+        document.getElementById('vg-output-size').textContent = Number.isFinite(outputWidth)
+            ? `输出尺寸：${outputWidth} × ${Math.max(1, Math.round(outputWidth * region.height / region.width))} px（按选区比例缩放）` : '请输入 GIF 输出宽度。';
+    };
+    cropEnabled.addEventListener('change', updateCrop);
+    inWidth.addEventListener('input', updateCrop);
+    Object.entries(cropInputs).forEach(([key, input]) => input.addEventListener('change', () => {
+        crop[key] = input.value === '' ? NaN : Number(input.value);
+        cropPreset.value = 'custom'; updateCrop();
+    }));
+    const centerCrop = () => { crop.x = Math.round((video.videoWidth - crop.width) / 2); crop.y = Math.round((video.videoHeight - crop.height) / 2); updateCrop(); };
+    document.getElementById('vg-crop-center').onclick = centerCrop;
+    cropPreset.addEventListener('change', () => {
+        if (cropPreset.value === 'custom') return;
+        if (cropPreset.value === 'full') { crop.width = video.videoWidth; crop.height = video.videoHeight; }
+        else {
+            const [w, h] = cropPreset.value.split(':').map(Number);
+            crop.width = Math.min(video.videoWidth, Math.round(video.videoHeight * w / h));
+            crop.height = Math.min(video.videoHeight, Math.round(crop.width * h / w));
+        }
+        centerCrop();
+    });
+    let drag = null;
+    cropBox.addEventListener('pointerdown', event => {
+        if (busy) return;
+        event.preventDefault(); cropBox.focus(); cropBox.setPointerCapture(event.pointerId);
+        drag = { pointer: event.pointerId, x: event.clientX, y: event.clientY, crop: { ...crop } };
+    });
+    cropBox.addEventListener('pointermove', event => {
+        if (!drag || busy) return;
+        const rect = cropLayer.getBoundingClientRect();
+        crop.x = drag.crop.x + (event.clientX - drag.x) * video.videoWidth / rect.width;
+        crop.y = drag.crop.y + (event.clientY - drag.y) * video.videoHeight / rect.height;
+        updateCrop();
+    });
+    const stopDrag = () => { drag = null; };
+    cropBox.addEventListener('pointerup', stopDrag);
+    cropBox.addEventListener('pointercancel', stopDrag);
+    cropBox.addEventListener('lostpointercapture', stopDrag);
+    cropBox.addEventListener('keydown', event => {
+        if (busy || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 1;
+        crop.x += event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0;
+        crop.y += event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0;
+        updateCrop();
+    });
+    const cropResizeObserver = new ResizeObserver(updateCrop);
+    cropResizeObserver.observe(video); cropResizeObserver.observe(videoWrapper);
+    const root = videoWrapper.closest('.vg-container');
+    const removalObserver = new MutationObserver(() => {
+        if (root.isConnected) return;
+        video.pause(); clearInterval(previewInterval); activeGif?.abort();
+        cropResizeObserver.disconnect(); removalObserver.disconnect();
+        if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+        if (resultUrl) URL.revokeObjectURL(resultUrl);
+    });
+    removalObserver.observe(root.parentNode, { childList: true });
 
     // --- 核心：时间轴滑块逻辑 ---
 
@@ -281,7 +401,7 @@ export function init() {
         let isDragging = false;
 
         const onMove = (event) => {
-            if (!isDragging) return;
+            if (!isDragging || busy) return;
 
             const rect = trackArea.getBoundingClientRect();
             let x = event.clientX - rect.left;
@@ -318,6 +438,7 @@ export function init() {
         };
 
         thumb.addEventListener('mousedown', (e) => {
+            if (busy) return;
             e.preventDefault(); // 防止选中文本
             isDragging = true;
             document.addEventListener('mousemove', onMove);
@@ -372,11 +493,16 @@ export function init() {
 
     // --- 文件处理 ---
     const handleFile = (file) => {
+        if (busy) return;
         if (!file || !file.type.startsWith('video')) return alert('请上传视频文件');
         fileInput.value = ''; // 允许重复上传
 
-        const url = URL.createObjectURL(file);
-        video.src = url;
+        video.pause(); clearInterval(previewInterval); previewInterval = null;
+        btnPlayRange.textContent = '▶️ 预览选中片段';
+        if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+        if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
+        sourceUrl = URL.createObjectURL(file);
+        video.src = sourceUrl;
 
         video.onloadedmetadata = () => {
             editorPanel.style.display = 'flex';
@@ -384,6 +510,13 @@ export function init() {
             progressContainer.style.display = 'none';
 
             videoDuration = video.duration;
+            if (!Number.isFinite(videoDuration) || videoDuration <= 0) {
+                editorPanel.style.display = 'none'; alert('无法读取视频时长，请换用支持的视频文件。'); return;
+            }
+            crop = { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight };
+            cropEnabled.checked = false; cropPreset.value = 'custom';
+            document.getElementById('vg-source-size').textContent = `原视频：${video.videoWidth} × ${video.videoHeight} px`;
+            updateCrop();
             durationDisplay.textContent = `总长: ${videoDuration.toFixed(1)}s`;
 
             // 默认截取范围
@@ -391,6 +524,7 @@ export function init() {
             inEnd.value = Math.min(5, videoDuration).toFixed(1);
             updateSliderUI();
         };
+        video.onerror = () => { editorPanel.style.display = 'none'; alert('无法读取此视频，请检查文件是否损坏或格式是否受浏览器支持。'); };
     };
 
     // --- 预览片段 ---
@@ -422,7 +556,26 @@ export function init() {
         }, 100);
     };
 
-    // --- 转换逻辑 (保持不变) ---
+    // Wait for a decoded frame, including the first frame when currentTime is 0.
+    const seekFrame = time => new Promise((resolve, reject) => {
+        const timer = setTimeout(() => finish(new Error('读取视频帧超时，请尝试其他视频或时间范围。')), 15000);
+        const finish = error => {
+            clearTimeout(timer);
+            video.removeEventListener('seeked', done);
+            video.removeEventListener('loadeddata', done);
+            video.removeEventListener('error', failed);
+            error ? reject(error) : resolve();
+        };
+        const done = () => { if (!video.seeking && video.readyState >= 2) finish(); };
+        const failed = () => finish(new Error('视频帧解码失败。'));
+        video.addEventListener('seeked', done);
+        video.addEventListener('loadeddata', done);
+        video.addEventListener('error', failed);
+        if (Math.abs(video.currentTime - time) < 0.000001 && !video.seeking) done();
+        else video.currentTime = time;
+    });
+
+    // --- 转换逻辑 ---
     btnConvert.onclick = async () => {
         if (!window.GIF || !window.gifWorkerUrl) return alert("转换引擎未就绪");
         if (previewInterval) btnPlayRange.click();
@@ -432,7 +585,16 @@ export function init() {
         const width = parseInt(inWidth.value);
         const fps = parseInt(inFps.value);
 
-        if (startTime >= endTime) return alert("时间范围无效");
+        if (![startTime, endTime, width, fps].every(Number.isFinite) || startTime < 0 || startTime >= endTime || endTime > videoDuration) return alert('请输入有效的时间范围，且不要超过视频时长。');
+        if (width < 16 || width > 1920 || fps < 1 || fps > 30) return alert('GIF 宽度需为 16–1920，帧率需为 1–30。');
+        const region = sourceRegion();
+        const height = Math.max(1, Math.round(width * region.height / region.width));
+        const frameTotal = Math.ceil((endTime - startTime) * fps);
+        if (height > 4096 || frameTotal > 1500 || width * height * frameTotal > 80000000) return alert('选区输出尺寸或帧数过大，请减小 GIF 宽度、帧率或片段时长。');
+        video.pause(); busy = true;
+        const controls = [...editorPanel.querySelectorAll('input,button,select')];
+        controls.forEach(control => { control.disabled = true; });
+        video.controls = false;
 
         btnConvert.classList.add('btn-disabled');
         btnConvert.disabled = true;
@@ -442,11 +604,11 @@ export function init() {
         resultArea.style.display = 'none';
 
         try {
-            const gif = new window.GIF({
+            const gif = activeGif = new window.GIF({
                 workers: 2,
                 quality: 10,
                 width: width,
-                height: width * (video.videoHeight / video.videoWidth),
+                height,
                 workerScript: window.gifWorkerUrl
             });
 
@@ -456,24 +618,17 @@ export function init() {
             canvas.height = gif.options.height;
 
             const step = 1 / fps;
-            let currentTime = startTime;
             let frameCount = 0;
-            const totalEstimFrames = (endTime - startTime) * fps;
+            const totalEstimFrames = frameTotal;
 
-            while (currentTime < endTime) {
-                video.currentTime = currentTime;
-                await new Promise(resolve => {
-                    const onSeek = () => {
-                        video.removeEventListener('seeked', onSeek);
-                        resolve();
-                    };
-                    video.addEventListener('seeked', onSeek);
-                });
+            for (let index = 0; index < frameTotal; index++) {
+                if (!root.isConnected) throw new Error('转换已结束。');
+                const currentTime = startTime + index * step;
+                await seekFrame(currentTime);
 
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
                 gif.addFrame(ctx, { copy: true, delay: 1000 / fps });
 
-                currentTime += step;
                 frameCount++;
                 const percent = Math.min(50, Math.round((frameCount / totalEstimFrames) * 50));
                 progressBar.style.width = `${percent}%`;
@@ -486,28 +641,34 @@ export function init() {
                 progressBar.textContent = `编码中 ${totalP}%`;
             });
 
-            gif.on('finished', (blob) => {
-                btnConvert.classList.remove('btn-disabled');
-                btnConvert.disabled = false;
-                btnConvert.textContent = "⚡ 生成 GIF";
+            const blob = await new Promise((resolve, reject) => {
+                gif.on('finished', resolve);
+                gif.on('abort', () => reject(new Error('转换已取消。')));
+                gif.render();
+            });
+            if (root.isConnected) {
                 progressBar.textContent = "完成!";
 
-                const url = URL.createObjectURL(blob);
+                if (resultUrl) URL.revokeObjectURL(resultUrl);
+                const url = resultUrl = URL.createObjectURL(blob);
                 gifResult.src = url;
                 btnDownload.href = url;
                 const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
-                gifSize.textContent = `大小: ${sizeMB} MB`;
+                gifSize.textContent = `${width} × ${height} px · ${fps} fps · ${sizeMB} MB${cropEnabled.checked ? ' · 已裁剪' : ''}`;
                 resultArea.style.display = 'block';
                 resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            });
-
-            gif.render();
+            }
 
         } catch (e) {
             console.error(e);
-            alert("错误: " + e.message);
+            activeGif?.abort();
+            if (root.isConnected) alert("错误: " + e.message);
+        } finally {
+            busy = false; activeGif = null;
+            controls.forEach(control => { control.disabled = false; });
+            video.controls = true;
             btnConvert.classList.remove('btn-disabled');
-            btnConvert.disabled = false;
+            btnConvert.textContent = '⚡ 生成 GIF';
         }
     };
 

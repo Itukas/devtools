@@ -156,6 +156,106 @@ async function pdfToWord(file, mode, status) {
     } finally { await task.destroy(); }
 }
 
+// Coordinates are canvas pixels. Preserve table rows/images that fit a page;
+// for oversized blocks use the individual text-line boxes instead.
+export function planPageSlices({ height, pageHeight, topMargin, bottomMargin, boxes, blocks = [], safeBreak }) {
+    const capacity = pageHeight - topMargin - bottomMargin;
+    if (capacity <= 0) throw new Error('文档页边距超过页面高度。');
+    const protectedBoxes = (safeBreak ? blocks : boxes).filter(box => box.bottom - box.top <= capacity - 4);
+    const contentEnd = Math.min(height, Math.max(1, ...boxes.map(box => box.bottom)));
+    // Already paginated Word sections may contain a footer inside the margin.
+    // Preserve a section that fits one page, including its original whitespace.
+    if (height <= pageHeight + 2 && contentEnd <= pageHeight + 2) {
+        return [{ start: 0, end: Math.ceil(Math.min(height, pageHeight)), offset: 0 }];
+    }
+    const slices = [];
+    let start = 0;
+    while (start < contentEnd) {
+        const offset = slices.length ? topMargin : 0;
+        let end = Math.min(contentEnd, start + pageHeight - offset - bottomMargin);
+        // Moving a break above a row may land inside another overlapping line.
+        // Repeat until every protected interval is clear of the boundary.
+        let crossing;
+        const edgeTolerance = safeBreak ? 4 : 0;
+        while ((crossing = protectedBoxes.find(box => box.top + edgeTolerance < end && box.bottom - edgeTolerance > end))) {
+            end = Math.floor(crossing.top - 2);
+        }
+        if (safeBreak && end < contentEnd) end = safeBreak(end, start, protectedBoxes);
+        if (end <= start) throw new Error('有内容超过单页可用高度，请缩小图片或字号后重试。');
+        slices.push({ start, end: Math.ceil(end), offset });
+        start = Math.ceil(end);
+        if (slices.length > 100) throw new Error('最多支持导出 100 页 PDF，请先拆分文档。');
+    }
+    return slices;
+}
+
+function pageLayout(page, scale, pageHeight) {
+    const doc = page.ownerDocument;
+    const origin = page.getBoundingClientRect().top;
+    const style = doc.defaultView.getComputedStyle(page);
+    const boxes = [];
+    const add = rect => {
+        if (rect.width > 0 && rect.height > 0) boxes.push({
+            top: Math.max(0, (rect.top - origin) * scale),
+            bottom: (rect.bottom - origin) * scale
+        });
+    };
+    const walker = doc.createTreeWalker(page, 4 /* SHOW_TEXT */);
+    const range = doc.createRange();
+    while (walker.nextNode()) {
+        if (!walker.currentNode.textContent.trim()) continue;
+        if (walker.currentNode.parentElement.closest('style,script')) continue;
+        range.selectNodeContents(walker.currentNode);
+        for (const rect of range.getClientRects()) add(rect);
+    }
+    const firstBlock = boxes.length;
+    page.querySelectorAll('img,svg,tr').forEach(element => add(element.getBoundingClientRect()));
+    const blocks = boxes.slice(firstBlock);
+    // A blank document still exports one page.
+    if (!boxes.length) boxes.push({ top: 0, bottom: 1 });
+    return { boxes, blocks, pageHeight: pageHeight * scale,
+        topMargin: (parseFloat(style.paddingTop) || 0) * scale,
+        bottomMargin: (parseFloat(style.paddingBottom) || 0) * scale };
+}
+
+// DOM line rectangles can overlap when Word uses tight line spacing. Check the
+// actual raster for a two-pixel gap instead. Continuous vertical table rules
+// are ignored, while glyph strokes and horizontal rules remain protected.
+function blankBreakFinder(canvas) {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    return (limit, start, blocks) => {
+        const bottom = Math.min(canvas.height - 1, Math.floor(limit));
+        const top = Math.max(Math.ceil(start) + 1, bottom - 600);
+        const sampleTop = Math.max(0, top - 32), sampleBottom = Math.min(canvas.height, bottom + 33);
+        const { data } = ctx.getImageData(0, sampleTop, canvas.width, sampleBottom - sampleTop);
+        const pixel = (x, y) => ((y - sampleTop) * canvas.width + x) * 4;
+        const ink = i => data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240;
+        let empty = 0;
+        for (let y = bottom; y >= top; y--) {
+            // Collapsed table borders touch adjacent rows. Allow the narrow
+            // border/padding band so a break does not move above the whole table.
+            let clear = !blocks.some(block => block.top + 12 < y && block.bottom - 12 > y);
+            for (let x = 0; clear && x < canvas.width; x++) {
+                const i = pixel(x, y);
+                if (!ink(i)) continue;
+                let verticalRule = y - 30 >= sampleTop && y + 30 < sampleBottom;
+                // Require continuous ink over a long column, not just a
+                // glyph's vertical stem. This permits breaking inside tall rows.
+                let matches = 0;
+                for (let dy = -30; verticalRule && dy <= 30; dy++) {
+                    const j = pixel(x, y + dy);
+                    if (ink(j)) matches++;
+                }
+                verticalRule = verticalRule && matches >= 52;
+                if (!verticalRule) clear = false;
+            }
+            empty = clear ? empty + 1 : 0;
+            if (empty >= 2) return y + 1;
+        }
+        throw new Error('未找到安全的分页空隙，请增加行距、缩小图片或在 Word 中插入分页符后重试。');
+    };
+}
+
 async function wordToPdf(file, root, status) {
     status('正在加载 Word 和 PDF 转换组件…');
     await loadScript(`${CDN}jszip@3.10.2/dist/jszip.min.js`, () => !!window.JSZip);
@@ -199,21 +299,21 @@ async function wordToPdf(file, root, status) {
                 width: Math.ceil(width), height: Math.ceil(height), windowWidth: 1200
             });
             try {
-                const sliceHeight = Math.round(pageHeight / height * canvas.height);
-                // scrollHeight rounds CSS pixels up; tolerate that rounding so a
-                // one-pixel remainder does not become an extra blank PDF page.
-                const pageCount = Math.max(1, Math.ceil((height - 2) / pageHeight));
-                for (let part = 0; part < pageCount; part++) {
-                    const y = part * sliceHeight;
+                const scale = canvas.width / width;
+                const slices = planPageSlices({
+                    ...pageLayout(page, scale, pageHeight), height: canvas.height,
+                    safeBreak: blankBreakFinder(canvas)
+                });
+                for (const { start, end, offset } of slices) {
                     if (++count > 100) throw new Error('最多支持导出 100 页 PDF，请先拆分文档。');
                     const mmWidth = width * 25.4 / 96, mmHeight = pageHeight * 25.4 / 96;
                     const options = { orientation: mmWidth > mmHeight ? 'landscape' : 'portrait', unit: 'mm', format: [mmWidth, mmHeight], compress: true };
                     if (!result) result = new jsPDF(options);
                     else result.addPage([mmWidth, mmHeight], options.orientation);
                     const slice = document.createElement('canvas');
-                    slice.width = canvas.width; slice.height = Math.min(sliceHeight, canvas.height - y);
-                    slice.getContext('2d').drawImage(canvas, 0, y, slice.width, slice.height, 0, 0, slice.width, slice.height);
-                    result.addImage(slice.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, mmWidth, slice.height / canvas.width * mmWidth);
+                    slice.width = canvas.width; slice.height = end - start;
+                    slice.getContext('2d').drawImage(canvas, 0, start, slice.width, slice.height, 0, 0, slice.width, slice.height);
+                    result.addImage(slice.toDataURL('image/jpeg', 0.94), 'JPEG', 0, offset / scale * 25.4 / 96, mmWidth, slice.height / canvas.width * mmWidth);
                     slice.width = slice.height = 0;
                 }
             } finally { canvas.width = canvas.height = 0; }
@@ -248,7 +348,7 @@ export function init() {
         root.querySelector('#fc-mode-label').hidden = !isPdf;
         root.querySelector('#fc-hint').textContent = isPdf
             ? '可编辑文字模式仅提取文字，不还原图片、表格和多栏排版，也不执行 OCR。扫描件可选保留外观模式，每页以图片插入 Word。最多 100 页。'
-            : '支持 .docx，旧版 .doc 请先另存为 .docx。尽量保留文字、图片和表格外观，复杂排版与字体可能变化；长分节按页高切分，建议在 Word 中插入分页符。导出的 PDF 是图片页面，文字不可搜索或复制。最多 100 页。';
+            : '支持 .docx，旧版 .doc 请先另存为 .docx。自动避开文字行分页，并尽量保持表格行和图片完整。复杂排版与字体可能变化，超高表格行会按文字行拆分。导出的 PDF 是图片页面，文字不可搜索或复制。最多 100 页。';
     }
     direction.addEventListener('change', update);
     mode.addEventListener('change', reset);
