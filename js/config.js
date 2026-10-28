@@ -1,5 +1,11 @@
 export default [
     {
+        id: 'file-convert',
+        name: 'PDF / Word 文件转换',
+        icon: '📄',
+        file: 'file_convert.js'
+    },
+    {
         id: 'json',
         name: 'JSON 工具箱',
         icon: '🔧',
